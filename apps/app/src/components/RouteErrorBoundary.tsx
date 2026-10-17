@@ -40,7 +40,11 @@ export function RouteErrorBoundary({ error, reset }: ErrorComponentProps) {
       {import.meta.env.DEV ? (
         <details className="rm-route-error-details">
           <summary>{t("errorDetails")}</summary>
-          <pre>{error.stack ?? error.message}</pre>
+          <pre>
+            {error instanceof Error
+              ? (error.stack ?? error.message)
+              : String(error)}
+          </pre>
         </details>
       ) : null}
     </div>

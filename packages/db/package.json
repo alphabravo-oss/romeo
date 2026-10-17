@@ -17,7 +17,7 @@
     "db:seed": "tsx src/seed-cli.ts",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:postgres-conformance": "vitest run src/romeo-repository.test.ts src/enterprise-ai-fixtures.test.ts"
+    "test:postgres-conformance": "vitest run"
   },
   "dependencies": {
     "@romeo/config": "workspace:*",

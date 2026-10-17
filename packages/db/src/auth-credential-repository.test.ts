@@ -110,6 +110,7 @@ describe("auth credential repository mappers", () => {
       emailNormalized: "user@example.com",
       passwordHash: "scrypt$v=1$hash",
       failedAttemptCount: 3,
+      mfaFailedAttemptCount: 2,
       lockedUntil: new Date("2026-06-27T00:10:00.000Z"),
       passwordUpdatedAt: new Date("2026-06-27T00:01:00.000Z"),
       createdAt: new Date("2026-06-27T00:00:00.000Z"),
@@ -123,6 +124,7 @@ describe("auth credential repository mappers", () => {
       emailNormalized: "user@example.com",
       passwordHash: "scrypt$v=1$hash",
       failedAttemptCount: 3,
+      mfaFailedAttemptCount: 2,
       lockedUntil: "2026-06-27T00:10:00.000Z",
       passwordUpdatedAt: "2026-06-27T00:01:00.000Z",
       createdAt: "2026-06-27T00:00:00.000Z",
@@ -142,6 +144,7 @@ describe("auth credential repository mappers", () => {
       confirmedAt: new Date("2026-06-27T00:01:00.000Z"),
       disabledAt: null,
       lastUsedAt: new Date("2026-06-27T00:02:00.000Z"),
+      lastTotpStep: 59_430_000,
       createdAt: new Date("2026-06-27T00:00:00.000Z"),
       updatedAt: new Date("2026-06-27T00:03:00.000Z"),
     });
@@ -156,6 +159,7 @@ describe("auth credential repository mappers", () => {
       secretEncrypted: '{"v":1}',
       confirmedAt: "2026-06-27T00:01:00.000Z",
       lastUsedAt: "2026-06-27T00:02:00.000Z",
+      lastTotpStep: 59_430_000,
       createdAt: "2026-06-27T00:00:00.000Z",
       updatedAt: "2026-06-27T00:03:00.000Z",
     });

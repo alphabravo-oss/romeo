@@ -4,14 +4,19 @@ import { queryIdentityUsers } from "./identity-user-query";
 
 import type { RomeoDatabase } from "./client";
 import { groupMemberships, groups, orgSsoOidcSettings, users } from "./schema";
-import {
-  asStringArray,
-  asStringRecord,
-  optionalDate,
-  optionalIsoString,
-  toIsoString,
-} from "./repository-mapping";
+import { optionalDate } from "./repository-mapping";
 import { containsPattern } from "./like-pattern";
+import {
+  normalizeUserRole,
+  toGroupInsert,
+  toGroupMembershipInsert,
+  toGroupMembershipRecord,
+  toGroupRecord,
+  toSsoOidcSettingsInsert,
+  toSsoOidcSettingsRecord,
+  toUserInsert,
+  toUserRecord,
+} from "./identity-record-mappers";
 
 type UserRole = "global_admin" | "org_admin" | "user";
 
@@ -255,12 +260,35 @@ export class PgIdentityRepository {
     return rows.map(toGroupMembershipRecord);
   }
 
+  async listGroupMembershipsBySource(
+    orgId: string,
+    userId: string,
+    source: string,
+  ): Promise<GroupMembershipRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(groupMemberships)
+      .where(
+        and(
+          eq(groupMemberships.orgId, orgId),
+          eq(groupMemberships.userId, userId),
+          eq(groupMemberships.source, source),
+        ),
+      )
+      .orderBy(asc(groupMemberships.groupId));
+    return rows.map(toGroupMembershipRecord);
+  }
+
   async createGroupMembership(
     membership: GroupMembershipRecord,
+    options: { source?: string } = {},
   ): Promise<GroupMembershipRecord> {
     const [row] = await this.db
       .insert(groupMemberships)
-      .values(toGroupMembershipInsert(membership))
+      .values({
+        ...toGroupMembershipInsert(membership),
+        source: options.source ?? null,
+      })
       .onConflictDoNothing({
         target: [groupMemberships.groupId, groupMemberships.userId],
       })
@@ -319,6 +347,27 @@ export class PgIdentityRepository {
     return row === undefined ? undefined : toSsoOidcSettingsRecord(row);
   }
 
+  async listEnabledSsoOidcSettingsByIssuer(
+    issuerUrl: string,
+  ): Promise<SsoOidcSettingsRecord[]> {
+    const issuer = issuerUrl.replace(/\/+$/u, "");
+    if (issuer.length === 0) return [];
+    const rows = await this.db
+      .select()
+      .from(orgSsoOidcSettings)
+      .where(
+        and(
+          eq(orgSsoOidcSettings.enabled, true),
+          or(
+            eq(orgSsoOidcSettings.issuerUrl, issuer),
+            eq(orgSsoOidcSettings.issuerUrl, `${issuer}/`),
+          ),
+        ),
+      )
+      .orderBy(asc(orgSsoOidcSettings.orgId));
+    return rows.map(toSsoOidcSettingsRecord);
+  }
+
   async upsertSsoOidcSettings(
     settings: SsoOidcSettingsRecord,
   ): Promise<SsoOidcSettingsRecord> {
@@ -345,112 +394,9 @@ export class PgIdentityRepository {
   }
 }
 
-export function toUserRecord(row: typeof users.$inferSelect): UserRecord {
-  const user: UserRecord = {
-    id: row.id,
-    orgId: row.orgId,
-    email: row.email,
-    name: row.name,
-    role: normalizeUserRole(row.role),
-  };
-  const disabledAt = optionalIsoString(row.disabledAt);
-  if (disabledAt !== undefined) user.disabledAt = disabledAt;
-  return user;
-}
-
-export function toGroupRecord(row: typeof groups.$inferSelect): GroupRecord {
-  return {
-    id: row.id,
-    orgId: row.orgId,
-    name: row.name,
-    slug: row.slug,
-    createdAt: toIsoString(row.createdAt),
-  };
-}
-
-export function toGroupMembershipRecord(
-  row: typeof groupMemberships.$inferSelect,
-): GroupMembershipRecord {
-  return {
-    groupId: row.groupId,
-    userId: row.userId,
-    orgId: row.orgId,
-    createdAt: toIsoString(row.createdAt),
-  };
-}
-
-export function toSsoOidcSettingsRecord(
-  row: typeof orgSsoOidcSettings.$inferSelect,
-): SsoOidcSettingsRecord {
-  return {
-    orgId: row.orgId,
-    enabled: row.enabled,
-    issuerUrl: row.issuerUrl,
-    clientId: row.clientId,
-    groupClaim: row.groupClaim,
-    adminGroups: asStringArray(row.adminGroups),
-    groupMap: asStringRecord(row.groupMap),
-    workspaceGroupMap: asStringRecord(row.workspaceGroupMap),
-    workspaceGroupPrefix: row.workspaceGroupPrefix,
-    createdBy: row.createdBy,
-    updatedBy: row.updatedBy,
-    createdAt: toIsoString(row.createdAt),
-    updatedAt: toIsoString(row.updatedAt),
-  };
-}
-
-function toUserInsert(record: UserRecord): typeof users.$inferInsert {
-  return {
-    id: record.id,
-    orgId: record.orgId,
-    email: record.email,
-    name: record.name,
-    role: normalizeUserRole(record.role),
-    disabledAt: optionalDate(record.disabledAt),
-  };
-}
-
-function normalizeUserRole(value: unknown): UserRole {
-  return value === "org_admin" || value === "global_admin" ? value : "user";
-}
-
-function toGroupInsert(record: GroupRecord): typeof groups.$inferInsert {
-  return {
-    id: record.id,
-    orgId: record.orgId,
-    name: record.name,
-    slug: record.slug,
-    createdAt: new Date(record.createdAt),
-  };
-}
-
-function toGroupMembershipInsert(
-  record: GroupMembershipRecord,
-): typeof groupMemberships.$inferInsert {
-  return {
-    groupId: record.groupId,
-    userId: record.userId,
-    orgId: record.orgId,
-    createdAt: new Date(record.createdAt),
-  };
-}
-
-function toSsoOidcSettingsInsert(
-  record: SsoOidcSettingsRecord,
-): typeof orgSsoOidcSettings.$inferInsert {
-  return {
-    orgId: record.orgId,
-    enabled: record.enabled,
-    issuerUrl: record.issuerUrl,
-    clientId: record.clientId,
-    groupClaim: record.groupClaim,
-    adminGroups: record.adminGroups,
-    groupMap: record.groupMap,
-    workspaceGroupMap: record.workspaceGroupMap,
-    workspaceGroupPrefix: record.workspaceGroupPrefix,
-    createdBy: record.createdBy,
-    updatedBy: record.updatedBy,
-    createdAt: new Date(record.createdAt),
-    updatedAt: new Date(record.updatedAt),
-  };
-}
+export {
+  toGroupMembershipRecord,
+  toGroupRecord,
+  toSsoOidcSettingsRecord,
+  toUserRecord,
+} from "./identity-record-mappers";

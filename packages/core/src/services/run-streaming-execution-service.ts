@@ -16,7 +16,7 @@ import {
   ProviderToolDefinition,
 } from "@romeo/providers";
 
-import type { RunRecord } from "../domain/entities";
+import type { BackgroundJob, RunRecord } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ActiveRunControllers, terminalRunEvents } from "./run-events";
 import type { RunEventSequencer } from "./run-event-sequencer";
@@ -46,10 +46,14 @@ import {
   continueTelemetryContext,
   withTelemetryFetch,
 } from "./telemetry-context";
-import { resolveRunProviderApiKeys } from "./run-provider-api-keys";
-import { governedProviderFetch } from "./provider-secret-egress";
 import { persistSafeMessageCompleted } from "./run-message-completion";
-import { providerTimeoutFields } from "./run-provider-timeout";
+import { runDetached } from "./run-detached";
+import { resolveRunProviderTransport } from "./run-provider-transport";
+import { startRunExecutionHeartbeat } from "./run-execution-heartbeat";
+import {
+  failRunExecution,
+  type RunExecutionProgress,
+} from "./run-execution-failure";
 
 export interface RunStreamingExecutionInput {
   run: RunRecord;
@@ -105,7 +109,28 @@ export class RunStreamingExecutionService {
     this.activeRuns.abort(runId);
   }
 
-  async execute(input: RunStreamingExecutionInput): Promise<void> {
+  /**
+   * Safe to fire and forget: never rejects. Unexpected failures are logged
+   * redacted and the run is marked failed instead of waiting for recovery.
+   */
+  execute(input: RunStreamingExecutionInput): Promise<void> {
+    const progress: RunExecutionProgress = {};
+    return runDetached("run.execute", () => this.executeRun(input, progress), {
+      context: { orgId: input.run.orgId, runId: input.run.id },
+      onError: () =>
+        failRunExecution({
+          ...input,
+          completeRun: this.completeRun,
+          executionState: this.executionState,
+          progress,
+        }),
+    });
+  }
+
+  private async executeRun(
+    input: RunStreamingExecutionInput,
+    progress: RunExecutionProgress,
+  ): Promise<void> {
     const claimedExecution = await this.executionState.claim(input);
     if (claimedExecution === undefined) return;
     const traceId = claimedExecution.job.payload.traceId;
@@ -128,58 +153,40 @@ export class RunStreamingExecutionService {
       this.repository,
       input.subject,
     );
-    const activePolicy = await activeContentPolicyFor(
-      this.repository,
-      input.subject.orgId,
-    );
-    const outputPolicyBuffer = new OutputPolicyBuffer({
-      mode: "rolling",
-      detectors: activePolicy.detectors,
-      failClosed: true,
-    });
     const persistedOutputParts: PersistedOutputPartRef[] = [
       ...(claimedExecution.checkpoint.outputParts ?? []),
     ];
-    const heartbeat = setInterval(() => {
-      void this.repository
-        .renewBackgroundJobLease({
-          orgId: input.run.orgId,
-          jobId: executionJob.id,
-          workerId: this.workerId,
-          leaseSeconds: this.leaseSeconds(),
-        })
-        .then((renewed) => {
-          if (renewed === undefined) {
-            controller.abort();
-            return;
-          }
-          executionJob = renewed;
-        })
-        .catch(() => {
-          controller.abort();
-        });
-    }, this.heartbeatMs());
-    heartbeat.unref?.();
+    progress.read = () => ({
+      assistantContent,
+      job: executionJob,
+      outputParts: [...persistedOutputParts],
+    });
+    const stopHeartbeat = startRunExecutionHeartbeat({
+      currentJob: () => executionJob,
+      intervalMs: this.heartbeatMs(),
+      leaseSeconds: this.leaseSeconds(),
+      onLost: () => controller.abort(),
+      onRenewed: (renewed) => {
+        executionJob = renewed;
+      },
+      orgId: input.run.orgId,
+      repository: this.repository,
+      workerId: this.workerId,
+    });
     try {
       // Everything after claiming the job must be inside this cleanup scope.
-      // Secret resolution can fail before provider streaming begins.
-      const providerApiKeys = await resolveRunProviderApiKeys(
-        [input.provider, input.routePlan.fallback?.provider],
-        this.options.secretResolver,
+      // Policy and secret resolution can fail before provider streaming.
+      const activePolicy = await activeContentPolicyFor(
+        this.repository,
+        input.subject.orgId,
       );
-      const providerTimeout = providerTimeoutFields(
-        this.options.providerStreamTimeoutMs,
-        input.model,
-      );
-      const providerFetch = governedProviderFetch({
-        fetchImpl: this.options.providerFetch ?? fetch,
-        providerApiKeys,
-        providers: [input.provider, input.routePlan.fallback?.provider],
-        timeoutMs:
-          "providerTimeoutMs" in providerTimeout
-            ? providerTimeout.providerTimeoutMs
-            : 60_000,
+      const outputPolicyBuffer = new OutputPolicyBuffer({
+        mode: "rolling",
+        detectors: activePolicy.detectors,
+        failClosed: true,
       });
+      const { providerApiKeys, providerFetch, providerTimeout } =
+        await resolveRunProviderTransport(input, this.options);
       for await (const rawEvent of streamRunEvents({
         adapter,
         provider: input.provider,
@@ -274,22 +281,10 @@ export class RunStreamingExecutionService {
                   : "provider_output_persistence_failed",
             },
           };
-          const routed = routedRunTarget(
-            input.run,
-            input.model,
-            input.routePlan,
-            failureEvent,
-          );
-          await this.completeRun(
-            routed.run,
-            failureEvent,
+          await this.failStreamed(input, failureEvent, executionJob, {
             assistantContent,
-            routed.model,
-            input.citations,
-            input.subject,
-            persistedOutputParts,
-          );
-          await this.executionState.finish(executionJob, "failed");
+            outputParts: persistedOutputParts,
+          });
           return;
         }
         if (terminalRunEvents.has(rawEvent.type)) {
@@ -393,22 +388,10 @@ export class RunStreamingExecutionService {
                   errorCode: gated.code,
                 },
               };
-              const routed = routedRunTarget(
-                input.run,
-                input.model,
-                input.routePlan,
-                failureEvent,
-              );
-              await this.completeRun(
-                routed.run,
-                failureEvent,
+              await this.failStreamed(input, failureEvent, executionJob, {
                 assistantContent,
-                routed.model,
-                input.citations,
-                input.subject,
-                persistedOutputParts,
-              );
-              await this.executionState.finish(executionJob, "failed");
+                outputParts: persistedOutputParts,
+              });
               return;
             }
             if (gated.outcome === "pause") {
@@ -462,7 +445,7 @@ export class RunStreamingExecutionService {
                 ? "waiting_tool_approval"
                 : "waiting_tool_dispatch",
             );
-            clearInterval(heartbeat);
+            stopHeartbeat();
             this.activeRuns.delete(input.run.id);
             await this.sequencer.append(this.repository, [event]);
             return;
@@ -476,9 +459,33 @@ export class RunStreamingExecutionService {
         }
       }
     } finally {
-      clearInterval(heartbeat);
+      stopHeartbeat();
       this.activeRuns.delete(input.run.id);
     }
+  }
+
+  private async failStreamed(
+    input: RunStreamingExecutionInput,
+    failureEvent: RunEvent,
+    executionJob: BackgroundJob,
+    output: { assistantContent: string; outputParts: PersistedOutputPartRef[] },
+  ): Promise<void> {
+    const routed = routedRunTarget(
+      input.run,
+      input.model,
+      input.routePlan,
+      failureEvent,
+    );
+    await this.completeRun(
+      routed.run,
+      failureEvent,
+      output.assistantContent,
+      routed.model,
+      input.citations,
+      input.subject,
+      output.outputParts,
+    );
+    await this.executionState.finish(executionJob, "failed");
   }
 
   private leaseSeconds(): number {

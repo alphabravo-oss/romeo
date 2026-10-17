@@ -4,22 +4,21 @@ import { ApiKeyService } from "./api-key-service";
 export * from "./audit-integrity";
 export * from "./runtime-key-rotation-posture-service";
 export * from "./internal-readiness-service";
-export * from "./data-connector-sync-coordinator";
 export * from "./tenant-scheduled-work-coordinator";
 import { AuthProviderSettingsService } from "./auth-provider-settings-service";
 import { BrowserAutomationService } from "./browser-automation-service";
 import { ChatService } from "./chat-service";
-import { lookupNetworkHost } from "./data-connector-network-policy";
+import { lookupNetworkHost } from "./outbound-network-policy";
+import { createProviderEgressFetch } from "./provider-egress-fetch";
+import { providerNetworkPolicyFromEnv } from "./provider-network-policy";
 import { ChatEventService } from "./chat-event-service";
 import { CapabilityService } from "./capability-resolver";
-import { createDataConnectorExecutor } from "./data-connector-executor-factory";
-import { DelegatedOAuthService } from "./delegated-oauth-service";
 import { DirectorySyncService } from "./directory-sync-service";
 import { KnowledgeService } from "./knowledge-service";
 import { FileService } from "./file-service";
 import { ManagedSecretService } from "./managed-secret-service";
 import { derivePageCursorSecret } from "./page-cursor";
-import { OpenWebUiCompatibilityService } from "./openwebui-compatibility-service";
+import { ChannelStore } from "./channel-store";
 import { OrganizationCapabilityFlagService } from "./organization-capability-flag-service";
 import { createQdrantKnowledgeVectorStore } from "./qdrant-knowledge-vector-store";
 import { RunService } from "./run-service";
@@ -82,6 +81,27 @@ export function createServices(
   ),
 ): RomeoServices {
   const env = runtime.env;
+  const providerNetworkPolicy = providerNetworkPolicyFromEnv(env);
+  // Provider base URLs are tenant-admin input: every model-provider request
+  // (verify, sync, chat, embeddings, images) goes through the policy-checked,
+  // DNS-pinned transport. Web search keeps its own egress client below.
+  const providerFetch = createProviderEgressFetch({
+    policy: providerNetworkPolicy,
+    ...(options.providerFetch === undefined
+      ? {}
+      : { fetchImpl: options.providerFetch }),
+  });
+  const embeddingFetch = createProviderEgressFetch({
+    policy: providerNetworkPolicy,
+    ...(options.embeddingFetch === undefined
+      ? {}
+      : { fetchImpl: options.embeddingFetch }),
+  });
+  const providerOptions: CreateServicesOptions = {
+    ...options,
+    embeddingFetch,
+    providerFetch,
+  };
   const platformCapabilityPolicy = runtime.capabilityPlatformPolicy;
   const capabilityFlags = new OrganizationCapabilityFlagService(
     repository,
@@ -121,16 +141,6 @@ export function createServices(
       ? vectorStoreDeployment
       : withExternalVectorRoutingActive(vectorStoreDeployment);
   const toolDispatchPayloadStore = runtime.toolDispatchPayloadStore;
-  const delegatedOAuth = new DelegatedOAuthService(
-    repository,
-    env,
-    options.delegatedOAuthFetch === undefined
-      ? {}
-      : { fetchImpl: options.delegatedOAuthFetch },
-  );
-  const dataConnectorExecutor =
-    options.dataConnectorExecutor ??
-    createDataConnectorExecutor(env, secretResolver, delegatedOAuth);
   const fileMalwareScanner = runtime.fileMalwareScanner;
   const knowledgeExtractor = runtime.knowledgeExtractor;
   const fileOcrProvider = runtime.fileOcrProvider;
@@ -181,7 +191,7 @@ export function createServices(
     undefined,
     objectStore,
     knowledgeExtractor,
-    options.embeddingFetch,
+    embeddingFetch,
     webhooks,
     {
       vectorDriver: activeVectorStoreDeployment.activeDriver,
@@ -221,7 +231,7 @@ export function createServices(
     repository,
     runEventSequencer,
     webhooks,
-    options.embeddingFetch,
+    embeddingFetch,
     objectStore,
     {
       capabilityPlatformPolicy: platformCapabilityPolicy,
@@ -244,9 +254,7 @@ export function createServices(
           input.input,
           { modelToolCallId: input.modelToolCallId },
         ),
-      ...(options.providerFetch === undefined
-        ? {}
-        : { providerFetch: options.providerFetch }),
+      providerFetch,
       providerStreamTimeoutMs: env.MODEL_PROVIDER_STREAM_TIMEOUT_MS,
       runExecutionLeaseSeconds: env.RUN_EXECUTION_LEASE_SECONDS,
       runRecoveryStaleMs: env.RUN_RECOVERY_STALE_MS,
@@ -278,7 +286,7 @@ export function createServices(
     cursorSecrets: userCursorSecrets,
   });
   const directorySync = new DirectorySyncService(repository, users);
-  const openWebUiCompatibility = new OpenWebUiCompatibilityService(repository);
+  const channelStore = new ChannelStore(repository);
   const authProviderSettings = new AuthProviderSettingsService(
     repository,
     env,
@@ -368,8 +376,6 @@ export function createServices(
     capabilityPlatformPolicy: platformCapabilityPolicy,
     chatEvents,
     chats,
-    dataConnectorExecutor,
-    delegatedOAuth,
     directorySync,
     env,
     files,
@@ -381,9 +387,10 @@ export function createServices(
     oidcRuntimeCache: runtime.oidcRuntimeCache,
     objectStore,
     oidc,
-    openWebUiCompatibility,
-    options,
+    channelStore,
+    options: providerOptions,
     providerCircuitBreaker: runtime.providerCircuitBreaker,
+    providerNetworkPolicy,
     quotaCoordinator,
     repository,
     runs,

@@ -105,15 +105,15 @@ describe("PgInventoriedTablePageRepository", () => {
       ),
     ).resolves.toMatchObject({ items: [{ id: "delivery_1" }] });
     await expect(
-      repository([[{ id: "sync_1" }]]).queryInventoriedTableRows(
+      repository([[{ id: "tool_call_1" }]]).queryInventoriedTableRows(
         input({
           includeTotals: false,
-          resource: "data_connector_sync_runs",
-          position: { id: "sync_0", value: null },
+          resource: "tool_trace_calls",
+          position: { id: "tool_call_0", value: null },
           sort: { field: "startedAt", direction: "desc" },
         }),
       ),
-    ).resolves.toMatchObject({ items: [{ id: "sync_1" }] });
+    ).resolves.toMatchObject({ items: [{ id: "tool_call_1" }] });
   });
 
   it("rejects unknown fields, operators, malformed values, and unsafe counts", async () => {

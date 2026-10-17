@@ -72,31 +72,6 @@ export const inventoriedTableResources: Record<
       sortFields: ["createdAt", "id", "status", "type"],
     },
   }),
-  data_connector_sync_runs: defineResource(
-    "data_connector_sync_runs",
-    "admin:read",
-    {
-      requiresParent: true,
-      nativePagination: true,
-      policy: {
-        defaultSort: { direction: "desc", field: "startedAt" },
-        filters: { status: ["eq", "neq"] },
-        searchFields: ["id", "status"],
-        sortFields: ["startedAt", "id", "status"],
-      },
-    },
-  ),
-  data_connectors: defineResource("data_connectors", "admin:read", {
-    summarize: (rows) => ({
-      activeTotal: rows.filter((row) => row.status === "active").length,
-      total: rows.length,
-    }),
-    requiresWorkspace: true,
-    load: async ({ repository, subject, workspaceId }) =>
-      publicRows(
-        await repository.listDataConnectors(subject.orgId, workspaceId),
-      ),
-  }),
   device_tokens: defineResource("device_tokens", "me:read", {
     load: async ({ repository, subject }) =>
       subject.type === "user"

@@ -8,9 +8,7 @@ import { PgCapabilityFlagRepository } from "./capability-flag-repository";
 import { PgIdempotencyRepository } from "./idempotency-repository";
 import { PgCollaborationRepository } from "./collaboration-repository";
 export type { ContentPolicyRepositoryFragment } from "./content-policy-repository-fragment";
-import { PgDataConnectorRepository } from "./data-connector-repository";
 import { PgDataDeletionRepository } from "./data-deletion-repository";
-import { PgDelegatedOAuthRepository } from "./delegated-oauth-repository";
 import { PgEvalRepository } from "./eval-repository";
 import { PgFileRepository } from "./file-repository";
 import { PgGovernanceBillingRepository } from "./governance-billing-repository";
@@ -91,7 +89,9 @@ export type TenantIdentityRepositoryFragment = Pick<
   | "getCurrentUser"
   | "getGroup"
   | "getSsoOidcSettings"
+  | "listEnabledSsoOidcSettingsByIssuer"
   | "listGroupMemberships"
+  | "listGroupMembershipsBySource"
   | "listGroups"
   | "listUsers"
   | "listUsersPage"
@@ -122,6 +122,8 @@ export type AuthCredentialRepositoryFragment = Pick<
   | "createLocalMfaChallenge"
   | "consumeLocalMfaFactor"
   | "consumeLocalMfaChallenge"
+  | "claimLocalMfaChallengeAttempt"
+  | "acceptLocalMfaTotpStep"
   | "consumeSamlAuthRequest"
   | "createLocalPasswordCredential"
   | "createSamlAuthRequest"
@@ -142,6 +144,8 @@ export type AuthCredentialRepositoryFragment = Pick<
   | "listLocalMfaFactors"
   | "listLocalMfaFactorsForOrg"
   | "recordFailedLocalPasswordAttempt"
+  | "recordFailedLocalMfaAttempt"
+  | "resetFailedLocalMfaAttempts"
   | "listServiceAccounts"
   | "listUserSessions"
   | "updateApiKey"
@@ -311,30 +315,6 @@ export type ToolConnectorRepositoryFragment = Pick<
   | "updateToolOperation"
 >;
 
-export type DataConnectorRepositoryFragment = Pick<
-  PgDataConnectorRepository,
-  | "claimDataConnectorSync"
-  | "createDataConnector"
-  | "createDataConnectorSync"
-  | "getDataConnector"
-  | "listDataConnectors"
-  | "listDataConnectorSyncs"
-  | "finishDataConnectorSync"
-  | "renewDataConnectorSyncLease"
-  | "updateDataConnector"
-  | "updateDataConnectorSync"
->;
-
-export type DelegatedOAuthRepositoryFragment = Pick<
-  PgDelegatedOAuthRepository,
-  | "createDelegatedOAuthConnection"
-  | "countDelegatedOAuthTokenKeyUsage"
-  | "getDelegatedOAuthConnection"
-  | "getDelegatedOAuthConnectionByProviderAccount"
-  | "listDelegatedOAuthConnections"
-  | "updateDelegatedOAuthConnection"
->;
-
 export type OperationalRepositoryFragment = Pick<
   PgOperationalRepository,
   | "auditRetentionExportGate"
@@ -460,6 +440,7 @@ export type AccessRepositoryFragment = Pick<
   | "deleteResourceGrant"
   | "deleteResourceGrantsForPrincipal"
   | "listResourceGrants"
+  | "listResourceGrantsBySource"
 >;
 
 export type CapabilityAssignmentRepositoryFragment = Pick<

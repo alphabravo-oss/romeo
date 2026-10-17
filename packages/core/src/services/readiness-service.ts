@@ -13,9 +13,6 @@ import {
   type VectorStoreDeploymentPosture,
   vectorStoreDeploymentFromEnv,
 } from "./vector-store-deployment";
-import { summarizePgvectorPhysicalIsolationEvidence } from "./pgvector-physical-isolation-evidence";
-import { summarizeQdrantLiveEvidence } from "./qdrant-live-evidence";
-import { GaEvidencePostureService } from "./ga-evidence-posture-service";
 import {
   authProviderFallbackCheck,
   authProviderOidcConfigCheck,
@@ -27,7 +24,6 @@ import {
   secretCheck,
 } from "./readiness-auth-checks";
 import {
-  connectorEgressCheck,
   databaseUrlCheck,
   postgresConnectionSecurityCheck,
   repositoryPersistenceCheck,
@@ -40,10 +36,7 @@ import {
   type ReadinessCheck,
   type ReadinessReport,
 } from "./readiness-result";
-import {
-  gaEvidenceReadinessCheck,
-  vectorStoreDeploymentCheck,
-} from "./readiness-vector-store-checks";
+import { vectorStoreDeploymentCheck } from "./readiness-vector-store-checks";
 import { objectStorageReadinessCheck } from "./readiness-object-storage";
 
 export * from "./readiness-result";
@@ -73,7 +66,6 @@ export class ReadinessService {
       models,
       quotas,
       retentionPolicy,
-      dataConnectors,
       toolConnectors,
       authProviderSettings,
     ] = await Promise.all([
@@ -81,31 +73,19 @@ export class ReadinessService {
       this.repository.listModels(subject.orgId),
       this.repository.listQuotaBuckets(subject.orgId),
       this.repository.getRetentionPolicy(subject.orgId),
-      this.repository.listDataConnectors(subject.orgId),
       this.repository.listToolConnectors(subject.orgId),
       new AuthProviderSettingsService(this.repository, this.env).report(
         subject,
       ),
     ]);
 
-    const [
-      pgvectorPhysicalIsolationEvidence,
-      qdrantLiveEvidence,
-      gaEvidencePosture,
-      objectStorageCheck,
-    ] = await Promise.all([
-      summarizePgvectorPhysicalIsolationEvidence(
-        this.env.PGVECTOR_PHYSICAL_ISOLATION_EVIDENCE_PATH,
-      ),
-      summarizeQdrantLiveEvidence(this.env.QDRANT_LIVE_EVIDENCE_PATH),
-      new GaEvidencePostureService(this.env).report(subject),
-      objectStorageReadinessCheck(this.env, this.objectStore),
-    ]);
+    const objectStorageCheck = await objectStorageReadinessCheck(
+      this.env,
+      this.objectStore,
+    );
     const vectorStoreCheck = await vectorStoreDeploymentCheck({
       deployment: this.vectorStoreDeployment,
       env: this.env,
-      pgvectorPhysicalIsolationEvidence,
-      qdrantLiveEvidence,
       readinessProbe: this.vectorStoreReadinessProbe,
     });
     const checks: ReadinessCheck[] = [
@@ -177,25 +157,7 @@ export class ReadinessService {
             count: quotas.length,
           })
         : warn("quotas", "No quota buckets are configured.", {}),
-      dataConnectors.some((connector) => connector.type !== "local_import") &&
-      this.env.DATA_CONNECTOR_EXECUTION_DRIVER === "disabled"
-        ? warn(
-            "outbound_connectors",
-            "Outbound connector metadata exists while execution is disabled.",
-            {
-              count: dataConnectors.filter(
-                (connector) => connector.type !== "local_import",
-              ).length,
-            },
-          )
-        : pass(
-            "outbound_connectors",
-            "Outbound connector execution posture is explicit.",
-            { driver: this.env.DATA_CONNECTOR_EXECUTION_DRIVER },
-          ),
-      connectorEgressCheck(this.env),
       toolOperationExecutionCheck(this.env, toolConnectors),
-      gaEvidenceReadinessCheck(gaEvidencePosture),
     ];
 
     return {

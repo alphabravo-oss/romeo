@@ -9,7 +9,6 @@ import { createHash } from "node:crypto";
 import type { Configuration as OpenidClientConfiguration } from "openid-client";
 
 import type { RomeoRepository } from "../domain/repository";
-import { createId } from "../ids";
 import {
   normalizeIssuer,
   oidcConfigStatus,
@@ -17,10 +16,11 @@ import {
   type ResolvedSsoOidcConfig,
 } from "./sso-config";
 import { createUserAuthSubject } from "./auth-subject";
+import { provisionExternalUser } from "./external-user-provisioning";
 import {
-  provisionExternalUser,
   syncExternalGroupMemberships,
-} from "./external-user-provisioning";
+  syncMappedWorkspaceMemberships,
+} from "./sso-membership-reconciliation";
 import {
   discoverOidcConfiguration,
   oidcMetadataFromConfiguration,
@@ -34,6 +34,7 @@ import {
   audienceIncludes,
   tokenKeyId,
   unverifiedJwtAudience,
+  unverifiedJwtIsIdToken,
   unverifiedJwtIssuer,
 } from "./oidc-token-hints";
 
@@ -164,20 +165,18 @@ export class OidcClient {
     };
   }
 
+  /** Authenticates an access token presented as an API bearer credential. */
   async authenticateJwt(
     token: string,
-    options: { expectedNonce?: string; orgId?: string } = {},
+    options: { orgId?: string } = {},
   ): Promise<OidcMappedSubject> {
+    if (unverifiedJwtIsIdToken(token))
+      throw new Error("OIDC ID tokens are not accepted as bearer credentials.");
     const orgId =
       options.orgId ?? (await this.resolveBearerOrganizationId(token));
     const { config, discovery } = await this.configured(orgId);
     const claims = await this.verifyClaims(token, config, discovery);
-    if (
-      options.expectedNonce !== undefined &&
-      claims.nonce !== options.expectedNonce
-    )
-      throw new Error("OIDC token nonce is invalid.");
-    return this.mapAndProvision(config, discovery, orgId, claims);
+    return this.mapAndProvision(config, discovery, orgId, claims, false);
   }
 
   async authenticateJwtWithConfig(
@@ -198,7 +197,8 @@ export class OidcClient {
       claims.nonce !== input.expectedNonce
     )
       throw new Error("OIDC token nonce is invalid.");
-    return this.mapAndProvision(config, discovery, orgId, claims);
+    // Interactive browser login: reconcile SSO-granted memberships.
+    return this.mapAndProvision(config, discovery, orgId, claims, true);
   }
 
   private discovery(
@@ -357,6 +357,7 @@ export class OidcClient {
     discovery: OidcDiscoveryDocument,
     orgId: string,
     claims: Record<string, unknown>,
+    revokeUnasserted: boolean,
   ): Promise<OidcMappedSubject> {
     const subject = mapOidcClaimsToSubject(claims, {
       orgId,
@@ -371,13 +372,18 @@ export class OidcClient {
       defaultScopes: defaultOidcScopes,
     });
     const user = await provisionOidcUser(this.repository, subject, claims);
+    const source = { kind: "oidc", providerKey: discovery.issuer } as const;
     await syncExternalGroupMemberships(this.repository, {
       groupIds: subject.groupIds,
       orgId,
+      revokeUnasserted,
+      source,
       userId: subject.id,
     });
-    await persistMappedWorkspaceMemberships(this.repository, {
+    await syncMappedWorkspaceMemberships(this.repository, {
       orgId,
+      revokeUnasserted,
+      source,
       userId: subject.id,
       workspaceIds: subject.workspaceIds,
     });
@@ -398,18 +404,22 @@ export class OidcClient {
     if (issuer === undefined) {
       throw new Error("OIDC token issuer is missing.");
     }
-    const organizations = await this.repository.listAllOrganizations();
-    const matches: string[] = [];
-    for (const organization of organizations) {
-      const settings = await this.repository.getSsoOidcSettings(
-        organization.id,
+    // Select candidate tenants by issuer in one indexed-by-issuer lookup so
+    // the cost of an unauthenticated bearer token never scales with the
+    // number of organizations, and no signature work happens before a
+    // single tenant is chosen.
+    const normalizedIssuer = normalizeIssuer(issuer);
+    const candidates =
+      await this.repository.listEnabledSsoOidcSettingsByIssuer(
+        normalizedIssuer,
       );
-      if (settings === undefined || !settings.enabled) continue;
-      if (normalizeIssuer(settings.issuerUrl) !== normalizeIssuer(issuer))
-        continue;
-      if (!audienceIncludes(audience, settings.clientId)) continue;
-      matches.push(organization.id);
-    }
+    const matches = candidates
+      .filter(
+        (settings) =>
+          normalizeIssuer(settings.issuerUrl) === normalizedIssuer &&
+          audienceIncludes(audience, settings.clientId),
+      )
+      .map((settings) => settings.orgId);
     if (matches.length === 1) return matches[0]!;
     throw new Error("OIDC organization could not be resolved.");
   }
@@ -420,40 +430,6 @@ const defaultOidcScopes: Scope[] = [
   "organizations:read",
   "workspaces:read",
 ];
-
-async function persistMappedWorkspaceMemberships(
-  repository: RomeoRepository,
-  input: { orgId: string; userId: string; workspaceIds: string[] },
-): Promise<void> {
-  if (input.workspaceIds.length === 0) return;
-  const [workspaces, grants] = await Promise.all([
-    repository.listWorkspaces(input.orgId),
-    repository.listResourceGrants(input.orgId),
-  ]);
-  const knownWorkspaceIds = new Set(
-    workspaces.map((workspace) => workspace.id),
-  );
-  for (const workspaceId of input.workspaceIds) {
-    if (!knownWorkspaceIds.has(workspaceId)) continue;
-    const exists = grants.some(
-      (grant) =>
-        grant.resourceType === "workspace" &&
-        grant.resourceId === workspaceId &&
-        grant.principalType === "user" &&
-        grant.principalId === input.userId &&
-        grant.permission === "read",
-    );
-    if (exists) continue;
-    await repository.createResourceGrant({
-      id: createId("grant"),
-      resourceType: "workspace",
-      resourceId: workspaceId,
-      principalType: "user",
-      principalId: input.userId,
-      permission: "read",
-    });
-  }
-}
 
 export function oidcUserId(issuer: string, subject: string): string {
   return `user_oidc_${createHash("sha256").update(`${issuer}\0${subject}`).digest("hex").slice(0, 24)}`;

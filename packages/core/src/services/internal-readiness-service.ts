@@ -227,7 +227,6 @@ function configurationCheck(env: RomeoEnv): Check {
     env.QUOTA_COORDINATION_DRIVER === "valkey" &&
     env.SESSION_SECRET.length >= 32 &&
     env.MANAGED_SECRET_ENCRYPTION_KEY.length >= 32 &&
-    env.DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY.length >= 32 &&
     env.WEBHOOK_SIGNING_KEY.length >= 16 &&
     (env.TOOL_DISPATCH_PAYLOAD_STORE_DRIVER !== "object-store" ||
       env.TOOL_DISPATCH_PAYLOAD_ENCRYPTION_KEY.length >= 32);
@@ -351,16 +350,12 @@ function expectedWorkers(
       worker("billing_lifecycle_enforcement", 15 * 60 * 1_000),
     );
   }
-  if (env.DATA_CONNECTOR_WORKER_ENABLED)
-    expected.push(workerName("data_connector_scheduled_sync", 10 * 60 * 1_000));
   return expected;
 }
 
 function expectedOperationNames(env: RomeoEnv): string[] {
   return expectedWorkers(env).map((expected) =>
-    expected.name === "data_connector_scheduled_sync"
-      ? "data_connector_sync"
-      : expected.name.replace(/^scheduled_/u, ""),
+    expected.name.replace(/^scheduled_/u, ""),
   );
 }
 

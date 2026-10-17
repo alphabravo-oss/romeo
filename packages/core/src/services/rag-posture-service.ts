@@ -15,15 +15,6 @@ import type {
 } from "./vector-store-deployment";
 import { vectorStoreDeploymentFromEnv } from "./vector-store-deployment";
 import { readRagPolicy } from "./rag-policy-service";
-import {
-  summarizePgvectorPhysicalIsolationEvidence,
-  type PgvectorPhysicalIsolationEvidenceSummary,
-} from "./pgvector-physical-isolation-evidence";
-import {
-  summarizeQdrantLiveEvidence,
-  type QdrantLiveEvidenceSummary,
-} from "./qdrant-live-evidence";
-
 export type RagPostureStatus = "degraded" | "ready";
 
 export interface RagPostureWarning {
@@ -31,7 +22,6 @@ export interface RagPostureWarning {
     | "failed_knowledge_jobs"
     | "failed_knowledge_sources"
     | "lexical_fallback_active"
-    | "physical_vector_isolation_evidence_pending"
     | "physical_vector_isolation_mismatch"
     | "stale_embedding_records"
     | "stale_source_chunk_counts";
@@ -53,16 +43,12 @@ export interface RagPostureReport {
     namespaceConfigured: boolean;
     partitioningConfigured: boolean;
     postureSource: "deployment_default";
-    externalStore: ExternalVectorStorePosture & {
-      evidence: QdrantLiveEvidenceSummary;
-    };
+    externalStore: ExternalVectorStorePosture;
     physicalIsolation: {
       policy: RagPolicyPhysicalVectorIsolation;
       deploymentMode: VectorStoreDeploymentPosture["isolationMode"];
       deploymentMatched: boolean;
-      evidence: PgvectorPhysicalIsolationEvidenceSummary;
-      externalVectorEvidence: QdrantLiveEvidenceSummary;
-      status: "deployment_mismatch" | "evidence_pending" | "satisfied";
+      status: "deployment_mismatch" | "satisfied";
     };
   };
   corpus: {
@@ -107,29 +93,15 @@ export class RagPostureService {
     private readonly vectorStoreDeployment: VectorStoreDeploymentPosture = vectorStoreDeploymentFromEnv(
       readEnv(),
     ),
-    private readonly pgvectorPhysicalIsolationEvidencePath: string = readEnv()
-      .PGVECTOR_PHYSICAL_ISOLATION_EVIDENCE_PATH,
-    private readonly qdrantLiveEvidencePath: string = readEnv()
-      .QDRANT_LIVE_EVIDENCE_PATH,
   ) {}
 
   async report(subject: AuthSubject): Promise<RagPostureReport> {
     assertScope(subject, "admin:read");
 
-    const [
-      workspaces,
-      jobPosture,
-      ragPolicy,
-      pgvectorPhysicalIsolationEvidence,
-      qdrantLiveEvidence,
-    ] = await Promise.all([
+    const [workspaces, jobPosture, ragPolicy] = await Promise.all([
       this.repository.listWorkspaces(subject.orgId),
       summarizeKnowledgeJobs(this.repository, subject.orgId),
       readRagPolicy(this.repository, subject.orgId),
-      summarizePgvectorPhysicalIsolationEvidence(
-        this.pgvectorPhysicalIsolationEvidencePath,
-      ),
-      summarizeQdrantLiveEvidence(this.qdrantLiveEvidencePath),
     ]);
     const knowledgeBases = (
       await Promise.all(
@@ -169,8 +141,6 @@ export class RagPostureService {
     const physicalIsolation = physicalIsolationPosture(
       ragPolicy.physicalVectorIsolation,
       this.vectorStoreDeployment,
-      pgvectorPhysicalIsolationEvidence,
-      qdrantLiveEvidence,
     );
     const warnings = postureWarnings(
       corpus,
@@ -197,10 +167,7 @@ export class RagPostureService {
         namespaceConfigured: externalStore.namespacePolicy !== "none",
         partitioningConfigured: externalStore.partitioningPolicy !== "none",
         postureSource: "deployment_default",
-        externalStore: {
-          ...externalStore,
-          evidence: qdrantLiveEvidence,
-        },
+        externalStore: { ...externalStore },
         physicalIsolation,
       },
       corpus,
@@ -376,58 +343,22 @@ function postureWarnings(
       severity: "warning",
     });
   }
-  if (
-    physicalIsolation.policy.enforcement === "required" &&
-    physicalIsolation.status === "evidence_pending"
-  ) {
-    warnings.push({
-      code: "physical_vector_isolation_evidence_pending",
-      count: 1,
-      severity: "warning",
-    });
-  }
   return warnings.sort((left, right) => left.code.localeCompare(right.code));
 }
 
 function physicalIsolationPosture(
   policy: RagPolicyPhysicalVectorIsolation,
   deployment: VectorStoreDeploymentPosture,
-  pgvectorPhysicalIsolationEvidence: PgvectorPhysicalIsolationEvidenceSummary,
-  qdrantLiveEvidence: QdrantLiveEvidenceSummary,
 ): RagPostureReport["vector"]["physicalIsolation"] {
   const deploymentMatched = physicalIsolationDeploymentMatched(
     policy.mode,
     deployment,
   );
-  const evidenceSatisfied =
-    policy.mode === "pgvector_partitioned_by_org" &&
-    deploymentMatched &&
-    pgvectorPhysicalIsolationEvidence.status === "satisfied";
-  const qdrantEvidenceSatisfied =
-    (policy.mode === "external_namespace_per_org" ||
-      policy.mode === "external_collection_per_org" ||
-      policy.mode === "dedicated_vector_store_per_org") &&
-    deploymentMatched &&
-    qdrantLiveEvidence.status === "satisfied" &&
-    qdrantLiveEvidence.namespacePolicy ===
-      deployment.externalVectorStore.namespacePolicy &&
-    qdrantLiveEvidence.partitioningPolicy ===
-      deployment.externalVectorStore.partitioningPolicy;
-  const status =
-    (policy.mode === "shared_row_scope" && deploymentMatched) ||
-    evidenceSatisfied ||
-    qdrantEvidenceSatisfied
-      ? "satisfied"
-      : deploymentMatched
-        ? "evidence_pending"
-        : "deployment_mismatch";
   return {
     policy,
     deploymentMode: deployment.isolationMode,
     deploymentMatched,
-    evidence: pgvectorPhysicalIsolationEvidence,
-    externalVectorEvidence: qdrantLiveEvidence,
-    status,
+    status: deploymentMatched ? "satisfied" : "deployment_mismatch",
   };
 }
 

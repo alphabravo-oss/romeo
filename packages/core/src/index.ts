@@ -5,8 +5,6 @@ export * from "./domain/audit-integrity";
 export * from "./domain/capabilities";
 export * from "./domain/capability-flags";
 export * from "./domain/idempotency";
-export * from "./domain/data-connectors";
-export * from "./domain/delegated-oauth";
 export * from "./domain/entities";
 export * from "./domain/file-tombstone";
 export * from "./domain/repository";
@@ -19,7 +17,7 @@ export type {
   MessagePartBackfillBatchResult,
   RenewFileLifecycleLeaseInput,
 } from "./domain/repository-content";
-export * from "./domain/repository-contract-inventory";
+export { ROMEO_REPOSITORY_METHOD_NAMES } from "./domain/repository-method-names";
 export * from "./errors";
 export * from "./public-api-error-registry";
 export * from "./audit-taxonomy";

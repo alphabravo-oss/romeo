@@ -276,12 +276,9 @@ function productionEnv(overrides: Partial<RomeoEnv> = {}): RomeoEnv {
     QUOTA_COORDINATION_DRIVER: "valkey",
     SESSION_SECRET: "production-session-secret-material-32",
     MANAGED_SECRET_ENCRYPTION_KEY: "managed-secret-encryption-material-32",
-    DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY:
-      "delegated-oauth-encryption-material-32",
     WEBHOOK_SIGNING_KEY: "webhook-signing-material-32",
     TOOL_DISPATCH_PAYLOAD_ENCRYPTION_KEY: "tool-dispatch-payload-material-32",
     SCHEDULED_TENANT_WORK_OWNER: "external",
-    DATA_CONNECTOR_WORKER_ENABLED: false,
     BILLING_ENABLED: false,
     MODEL_CATALOG_SYNC_ENABLED: false,
     TEMPORARY_CHAT_CLEANUP_ENABLED: false,

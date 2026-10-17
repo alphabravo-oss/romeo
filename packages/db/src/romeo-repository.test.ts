@@ -123,9 +123,6 @@ describe("RomeoRepository conformance", () => {
               repository.renewKnowledgeSourceExtractionLease,
             finishKnowledgeSourceExtraction:
               repository.finishKnowledgeSourceExtraction,
-            claimDataConnectorSync: repository.claimDataConnectorSync,
-            renewDataConnectorSyncLease: repository.renewDataConnectorSyncLease,
-            finishDataConnectorSync: repository.finishDataConnectorSync,
             createContentDeletionOperation:
               repository.createContentDeletionOperation,
             getContentDeletionOperation: repository.getContentDeletionOperation,
@@ -182,7 +179,7 @@ describe("RomeoRepository conformance", () => {
             restoreServerTableSavedView: repository.restoreServerTableSavedView,
           } satisfies Record<string, (...args: never[]) => Promise<unknown>>;
 
-          expect(Object.keys(specializedMethods)).toHaveLength(50);
+          expect(Object.keys(specializedMethods)).toHaveLength(47);
           expect(
             Object.values(specializedMethods).every(
               (method) => typeof method === "function",
@@ -1734,6 +1731,27 @@ describe("RomeoRepository conformance", () => {
             enabled: false,
             issuerUrl: "https://issuer.example.com",
           });
+          expect(
+            await repository.listEnabledSsoOidcSettingsByIssuer(
+              "https://issuer.example.com/",
+            ),
+          ).toEqual([]);
+          await repository.upsertSsoOidcSettings({
+            ...settings,
+            updatedAt: "2026-06-30T10:06:00.000Z",
+          });
+          expect(
+            (
+              await repository.listEnabledSsoOidcSettingsByIssuer(
+                "https://issuer.example.com/",
+              )
+            ).map((item) => item.orgId),
+          ).toEqual(["org_default"]);
+          expect(
+            await repository.listEnabledSsoOidcSettingsByIssuer(
+              "https://other-issuer.example.com",
+            ),
+          ).toEqual([]);
         });
       });
 
@@ -2166,6 +2184,106 @@ describe("RomeoRepository conformance", () => {
               expectedSecretEncrypted: "stale-secret",
             }),
           ).toBeUndefined();
+
+          await Promise.all(
+            Array.from({ length: 3 }, () =>
+              repository.recordFailedLocalMfaAttempt({
+                credentialId: localPassword.id,
+                attemptedAt: "2026-06-30T10:40:00.000Z",
+                lockedUntil: "2026-06-30T12:00:00.000Z",
+                maxFailedAttempts: 3,
+              }),
+            ),
+          );
+          expect(
+            await repository.getLocalPasswordCredentialByUserId(
+              "user_dev_admin",
+            ),
+          ).toMatchObject({
+            failedAttemptCount: 12,
+            mfaFailedAttemptCount: 3,
+            lockedUntil: "2026-06-30T12:00:00.000Z",
+          });
+          await repository.updateLocalPasswordCredential({
+            ...localPassword,
+            updatedAt: "2026-06-30T10:41:00.000Z",
+          });
+          expect(
+            (
+              await repository.getLocalPasswordCredentialByUserId(
+                "user_dev_admin",
+              )
+            )?.mfaFailedAttemptCount,
+          ).toBe(3);
+          await repository.resetFailedLocalMfaAttempts({
+            credentialId: localPassword.id,
+            updatedAt: "2026-06-30T10:42:00.000Z",
+          });
+          expect(
+            (
+              await repository.getLocalPasswordCredentialByUserId(
+                "user_dev_admin",
+              )
+            )?.mfaFailedAttemptCount ?? 0,
+          ).toBe(0);
+
+          const limitedChallenge = await repository.createLocalMfaChallenge({
+            id: "local_mfa_challenge_attempts",
+            orgId: "org_default",
+            userId: "user_dev_admin",
+            expiresAt: "2099-06-30T10:40:00.000Z",
+            createdAt: "2099-06-30T10:20:00.000Z",
+          });
+          const claimInput = {
+            id: limitedChallenge.id,
+            orgId: limitedChallenge.orgId,
+            userId: limitedChallenge.userId,
+            attemptedAt: "2099-06-30T10:21:00.000Z",
+            maxAttempts: 2,
+          };
+          const claims = await Promise.all(
+            Array.from({ length: 4 }, () =>
+              repository.claimLocalMfaChallengeAttempt(claimInput),
+            ),
+          );
+          expect(claims.filter(Boolean)).toHaveLength(2);
+          expect(
+            await repository.consumeLocalMfaChallenge({
+              id: limitedChallenge.id,
+              orgId: limitedChallenge.orgId,
+              userId: limitedChallenge.userId,
+              consumedAt: "2099-06-30T10:22:00.000Z",
+            }),
+          ).toBeDefined();
+          expect(
+            await repository.claimLocalMfaChallengeAttempt({
+              ...claimInput,
+              maxAttempts: 10,
+            }),
+          ).toBeUndefined();
+
+          const acceptStep = (timeStep: number) =>
+            repository.acceptLocalMfaTotpStep({
+              factorId: factor.id,
+              timeStep,
+              usedAt: "2026-06-30T10:43:00.000Z",
+            });
+          const firstStep = await Promise.all([
+            acceptStep(100),
+            acceptStep(100),
+          ]);
+          expect(firstStep.filter(Boolean)).toHaveLength(1);
+          expect(await acceptStep(99)).toBeUndefined();
+          expect(await acceptStep(101)).toMatchObject({ lastTotpStep: 101 });
+          await repository.updateLocalMfaFactor({
+            ...activeFactor,
+            name: "Renamed authenticator",
+            updatedAt: "2026-06-30T10:44:00.000Z",
+          });
+          expect(await repository.getLocalMfaFactor(factor.id)).toMatchObject({
+            name: "Renamed authenticator",
+            lastTotpStep: 101,
+          });
         });
       });
 
@@ -3285,144 +3403,6 @@ describe("RomeoRepository conformance", () => {
             await repository.listKnowledgeChunks(knowledgeBase.id),
           ).toEqual([]);
 
-          const connector = await repository.createDataConnector({
-            id: "data_connector_conformance",
-            orgId: "org_default",
-            workspaceId: "workspace_default",
-            knowledgeBaseId: knowledgeBase.id,
-            type: "local_import",
-            name: "Local import",
-            config: { source: "manual" },
-            status: "active",
-            syncIntervalMinutes: 60,
-            nextSyncAt: "2026-06-30T12:45:00.000Z",
-            createdBy: "user_dev_admin",
-            createdAt: "2026-06-30T11:45:00.000Z",
-            updatedAt: "2026-06-30T11:45:00.000Z",
-          });
-          expect(await repository.getDataConnector(connector.id)).toEqual(
-            connector,
-          );
-          expect(
-            await repository.listDataConnectors(
-              "org_default",
-              "workspace_default",
-            ),
-          ).toEqual([connector]);
-          expect(
-            await repository.updateDataConnector({
-              ...connector,
-              status: "disabled",
-              lastSyncAt: "2026-06-30T11:46:00.000Z",
-              updatedAt: "2026-06-30T11:46:00.000Z",
-            }),
-          ).toMatchObject({ status: "disabled" });
-
-          const delegatedOAuthConnection =
-            await repository.createDelegatedOAuthConnection({
-              id: "delegated_oauth_connection_conformance",
-              orgId: "org_default",
-              workspaceId: "workspace_default",
-              userId: "user_dev_admin",
-              providerId: "github",
-              connectorType: "github",
-              providerAccountId: "12345",
-              providerAccountLogin: "octocat",
-              scopes: ["repo", "read:user"],
-              status: "active",
-              token: {
-                v: 1,
-                alg: "A256GCM",
-                iv: "iv",
-                ciphertext: "ciphertext",
-                tag: "tag",
-                createdAt: "2026-06-30T11:46:30.000Z",
-              },
-              accessTokenExpiresAt: "2026-06-30T12:46:30.000Z",
-              createdAt: "2026-06-30T11:46:30.000Z",
-              updatedAt: "2026-06-30T11:46:30.000Z",
-            });
-          expect(
-            await repository.getDelegatedOAuthConnection(
-              delegatedOAuthConnection.id,
-            ),
-          ).toEqual(delegatedOAuthConnection);
-          expect(
-            await repository.getDelegatedOAuthConnectionByProviderAccount({
-              orgId: "org_default",
-              workspaceId: "workspace_default",
-              userId: "user_dev_admin",
-              providerId: "github",
-              connectorType: "github",
-              providerAccountId: "12345",
-            }),
-          ).toEqual(delegatedOAuthConnection);
-          expect(
-            await repository.listDelegatedOAuthConnections(
-              "org_default",
-              "workspace_default",
-              "user_dev_admin",
-            ),
-          ).toEqual([delegatedOAuthConnection]);
-          expect(
-            await repository.listDelegatedOAuthConnections(
-              "org_default",
-              "workspace_default",
-              "user_other",
-            ),
-          ).toEqual([]);
-          const lockedDelegatedOAuthConnection =
-            await repository.withDelegatedOAuthConnectionRefreshLock(
-              delegatedOAuthConnection.id,
-              async (lockedRepository) =>
-                lockedRepository.updateDelegatedOAuthConnection({
-                  ...delegatedOAuthConnection,
-                  lastUsedAt: "2026-06-30T11:46:40.000Z",
-                  updatedAt: "2026-06-30T11:46:40.000Z",
-                }),
-            );
-          expect(lockedDelegatedOAuthConnection).toMatchObject({
-            lastUsedAt: "2026-06-30T11:46:40.000Z",
-          });
-          expect(
-            await repository.updateDelegatedOAuthConnection({
-              ...lockedDelegatedOAuthConnection,
-              status: "revoked",
-              revokedAt: "2026-06-30T11:46:45.000Z",
-              updatedAt: "2026-06-30T11:46:45.000Z",
-            }),
-          ).toMatchObject({ status: "revoked" });
-
-          const sync = await repository.createDataConnectorSync({
-            id: "data_connector_sync_conformance",
-            orgId: "org_default",
-            workspaceId: "workspace_default",
-            knowledgeBaseId: knowledgeBase.id,
-            connectorId: connector.id,
-            status: "running",
-            createdBy: "user_dev_admin",
-            itemCount: 0,
-            sourceIds: [],
-            summary: {},
-            startedAt: "2026-06-30T11:47:00.000Z",
-          });
-          expect(
-            await repository.listDataConnectorSyncs(
-              "org_default",
-              connector.id,
-            ),
-          ).toEqual([sync]);
-          expect(
-            await repository.updateDataConnectorSync({
-              ...sync,
-              status: "completed",
-              itemCount: 1,
-              sourceIds: [source.id],
-              summary: { imported: 1 },
-              completedAt: "2026-06-30T11:48:00.000Z",
-            }),
-          ).toMatchObject({ itemCount: 1, status: "completed" });
-
           expect(
             await repository.deleteKnowledgeSource(source.id),
           ).toMatchObject({ id: source.id });
@@ -4257,11 +4237,11 @@ describe("RomeoRepository conformance", () => {
           ).rejects.toThrow("Unregistered usage metric");
 
           const job = await repository.createBackgroundJob({
-            id: "job_connector_sync",
+            id: "job_tool_dispatch",
             orgId: "org_default",
-            type: "data_connector.sync",
+            type: "tool.operation.dispatch_request",
             status: "queued",
-            payload: { connectorId: "connector_1" },
+            payload: { toolConnectorId: "tool_connector_1" },
             createdAt: "2026-06-30T12:03:00.000Z",
             updatedAt: "2026-06-30T12:03:00.000Z",
           });
@@ -4277,7 +4257,7 @@ describe("RomeoRepository conformance", () => {
           ).toMatchObject({ payload: { reviewed: true } });
           const claimed = await repository.claimBackgroundJob({
             orgId: "org_default",
-            type: "data_connector.sync",
+            type: "tool.operation.dispatch_request",
             workerId: "svc_worker",
             leaseSeconds: 300,
             now: "2026-06-30T12:04:00.000Z",
@@ -4299,7 +4279,7 @@ describe("RomeoRepository conformance", () => {
           expect(
             await repository.claimBackgroundJob({
               orgId: "org_default",
-              type: "data_connector.sync",
+              type: "tool.operation.dispatch_request",
               workerId: "svc_other",
               leaseSeconds: 300,
               now: "2026-06-30T12:05:00.000Z",
@@ -4642,17 +4622,8 @@ describe("RomeoRepository conformance", () => {
           };
 
           await expect(
-            repository.countDelegatedOAuthTokenKeyUsage(query),
-          ).resolves.toEqual(expectedGlobal);
-          await expect(
             repository.countWebhookSigningKeyUsage(query),
           ).resolves.toEqual(expectedGlobal);
-          await expect(
-            repository.countDelegatedOAuthTokenKeyUsage({
-              ...query,
-              orgId: "org_default",
-            }),
-          ).resolves.toEqual(expectedTenant);
           await expect(
             repository.countWebhookSigningKeyUsage({
               ...query,
@@ -5378,83 +5349,6 @@ async function seedRuntimeKeyUsageCensus(
     email: "runtime-key-census-other@romeo.local",
     name: "Runtime key census other",
   });
-
-  const envelopeFields = {
-    alg: "A256GCM" as const,
-    ciphertext: "ciphertext",
-    createdAt: now,
-    iv: "iv",
-    tag: "tag",
-  };
-  const oauthRows = [
-    {
-      name: "active",
-      orgId: "org_default",
-      token: {
-        ...envelopeFields,
-        keyVersion: "aaaaaaaaaaaaaaaa",
-        v: 3 as const,
-      },
-      userId: "user_dev_admin",
-      workspaceId: "workspace_default",
-    },
-    {
-      name: "previous",
-      orgId: otherOrgId,
-      token: {
-        ...envelopeFields,
-        keyVersion: "bbbbbbbbbbbbbbbb",
-        v: 3 as const,
-      },
-      userId: otherUserId,
-      workspaceId: otherWorkspaceId,
-    },
-    {
-      name: "legacy",
-      orgId: otherOrgId,
-      token: { ...envelopeFields, v: 2 as const },
-      userId: otherUserId,
-      workspaceId: otherWorkspaceId,
-    },
-    {
-      name: "unknown",
-      orgId: otherOrgId,
-      token: {
-        ...envelopeFields,
-        keyVersion: "cccccccccccccccc",
-        v: 3 as const,
-      },
-      userId: otherUserId,
-      workspaceId: otherWorkspaceId,
-    },
-    {
-      name: "corrupt",
-      orgId: otherOrgId,
-      token: {
-        ...envelopeFields,
-        keyVersion: "corrupt",
-        v: 3 as const,
-      },
-      userId: otherUserId,
-      workspaceId: otherWorkspaceId,
-    },
-  ];
-  for (const row of oauthRows) {
-    await repository.createDelegatedOAuthConnection({
-      id: `delegated_oauth_runtime_key_census_${row.name}`,
-      orgId: row.orgId,
-      workspaceId: row.workspaceId,
-      userId: row.userId,
-      providerId: "github",
-      connectorType: "github",
-      providerAccountId: `runtime_key_census_${row.name}`,
-      scopes: ["repo"],
-      status: "active",
-      token: row.token,
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
 
   const subscriptions = [
     {

@@ -13,6 +13,7 @@ import { publicQueuedTurn, type QueuedChatTurn } from "./run-command-service";
 import { isTerminalRunStatus } from "./run-recovery-service";
 import type { StartRunInput } from "./run-service-contracts";
 import { recordUsage } from "./record-usage";
+import { runDetached } from "./run-detached";
 import { persistedSubjectActorId } from "./subject-persisted-actor";
 
 interface SubjectSnapshot {
@@ -63,7 +64,7 @@ export class RunQueueService {
       permission: "read",
     });
     await this.recoverStaleRun(chatId);
-    void this.drain(chatId);
+    this.drainDetached(chatId);
     return (await this.repository.listQueuedChatTurns(chatId))
       .filter(
         (turn) =>
@@ -156,7 +157,7 @@ export class RunQueueService {
       assertSameReasoningPolicy(stored, turn);
       return stored;
     });
-    void this.drain(input.chatId);
+    this.drainDetached(input.chatId);
     return publicQueuedTurn(created);
   }
 
@@ -198,6 +199,13 @@ export class RunQueueService {
     return publicQueuedTurn(current ?? turn);
   }
 
+  /** Fire-and-forget drain that never surfaces an unhandled rejection. */
+  drainDetached(chatId: string): void {
+    void runDetached("run.queue.drain", () => this.drain(chatId), {
+      context: { chatId },
+    });
+  }
+
   async drain(chatId: string): Promise<void> {
     if (this.drainingChats.has(chatId)) return;
     this.drainingChats.add(chatId);
@@ -220,15 +228,17 @@ export class RunQueueService {
       if (next === undefined) return;
       const heartbeat = setInterval(() => {
         const heartbeatAt = new Date();
-        void this.repository.renewQueuedChatTurnLease({
-          turnId: next.id,
-          leaseOwner: this.workerId,
-          leaseToken,
-          now: heartbeatAt.toISOString(),
-          leaseExpiresAt: new Date(
-            heartbeatAt.getTime() + 60_000,
-          ).toISOString(),
-        });
+        void runDetached("run.queue.lease_renewal", () =>
+          this.repository.renewQueuedChatTurnLease({
+            turnId: next.id,
+            leaseOwner: this.workerId,
+            leaseToken,
+            now: heartbeatAt.toISOString(),
+            leaseExpiresAt: new Date(
+              heartbeatAt.getTime() + 60_000,
+            ).toISOString(),
+          }),
+        );
       }, 20_000);
       heartbeat.unref?.();
       try {

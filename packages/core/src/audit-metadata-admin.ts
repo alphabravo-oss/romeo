@@ -170,7 +170,6 @@ export const canonicalAdminAuditMetadataKeysByAction = {
   ],
   "admin.key_rotation.posture.read": [
     "aggregationScope",
-    "delegatedOAuth",
     "keyMaterialReturned",
     "schema",
     "secretValuesReturned",
@@ -282,28 +281,6 @@ export const canonicalAdminAuditMetadataKeysByAction = {
   "device_authorization.create": ["scopeCount"],
   "device_authorization.refresh": ["scopeCount"],
   "device_authorization.revoke": [],
-  "delegated_oauth.connect": [
-    "connectorType",
-    "providerAccountHash",
-    "providerId",
-    "scopeCount",
-    "workspaceId",
-  ],
-  "delegated_oauth.refresh": [
-    "connectorType",
-    "errorCode",
-    "providerAccountHash",
-    "providerId",
-    "scopeCount",
-    "workspaceId",
-  ],
-  "delegated_oauth.revoke": [
-    "connectorType",
-    "providerAccountHash",
-    "providerId",
-    "providerRevocationStatus",
-    "workspaceId",
-  ],
   "governance.data_deletion.execute": [
     "counts",
     "knowledgeBaseId",

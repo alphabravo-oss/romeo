@@ -41,7 +41,6 @@ const exportDocument = (): WorkspaceExportDocument => ({
   counts: {
     agents: 0,
     chats: 0,
-    dataConnectors: 0,
     knowledgeBases: 0,
     messages: 0,
     workflows: 0,
@@ -49,7 +48,6 @@ const exportDocument = (): WorkspaceExportDocument => ({
   resources: {
     agents: [],
     chats: [],
-    dataConnectors: [],
     knowledgeBases: [],
     workflows: [],
   },

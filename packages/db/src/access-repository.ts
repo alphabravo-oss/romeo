@@ -5,7 +5,6 @@ import {
   agentModels,
   baseModels,
   chats,
-  dataConnectors,
   knowledgeBases,
   objectRecords,
   promptTemplates,
@@ -22,7 +21,6 @@ import {
 export type ResourceTypeRecord =
   | "agent"
   | "chat"
-  | "data_connector"
   | "file"
   | "folder"
   | "knowledge_base"
@@ -65,13 +63,36 @@ export class PgAccessRepository {
     return rows.map(toResourceGrantRecord);
   }
 
+  async listResourceGrantsBySource(
+    orgId: string,
+    principalId: string,
+    source: string,
+  ): Promise<ResourceGrantRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(resourceGrants)
+      .where(
+        and(
+          eq(resourceGrants.orgId, orgId),
+          eq(resourceGrants.principalId, principalId),
+          eq(resourceGrants.source, source),
+        ),
+      )
+      .orderBy(asc(resourceGrants.resourceType), asc(resourceGrants.id));
+    return rows.map(toResourceGrantRecord);
+  }
+
   async createResourceGrant(
     grant: ResourceGrantRecord,
+    options: { source?: string } = {},
   ): Promise<ResourceGrantRecord> {
     const orgId = await this.orgIdForGrant(grant);
     const [row] = await this.db
       .insert(resourceGrants)
-      .values(toResourceGrantInsert(grant, orgId))
+      .values({
+        ...toResourceGrantInsert(grant, orgId),
+        source: options.source ?? null,
+      })
       .onConflictDoNothing({
         target: [
           resourceGrants.orgId,
@@ -150,11 +171,6 @@ export class PgAccessRepository {
       return this.requiredOrgId(this.chatOrgId(grant.resourceId), grant);
     if (grant.resourceType === "run")
       return this.requiredOrgId(this.runOrgId(grant.resourceId), grant);
-    if (grant.resourceType === "data_connector")
-      return this.requiredOrgId(
-        this.dataConnectorOrgId(grant.resourceId),
-        grant,
-      );
     if (grant.resourceType === "file")
       return this.requiredOrgId(this.fileObjectOrgId(grant.resourceId), grant);
     if (grant.resourceType === "knowledge_base")
@@ -268,17 +284,6 @@ export class PgAccessRepository {
     return row?.orgId;
   }
 
-  private async dataConnectorOrgId(
-    resourceId: string,
-  ): Promise<string | undefined> {
-    const [row] = await this.db
-      .select({ orgId: dataConnectors.orgId })
-      .from(dataConnectors)
-      .where(eq(dataConnectors.id, resourceId))
-      .limit(1);
-    return row?.orgId;
-  }
-
   private async knowledgeBaseOrgId(
     resourceId: string,
   ): Promise<string | undefined> {
@@ -379,7 +384,6 @@ function asResourceType(value: string): ResourceTypeRecord {
   if (
     value === "agent" ||
     value === "chat" ||
-    value === "data_connector" ||
     value === "file" ||
     value === "folder" ||
     value === "knowledge_base" ||

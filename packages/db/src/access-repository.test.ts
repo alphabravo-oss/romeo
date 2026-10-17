@@ -15,9 +15,11 @@ describe("access repository mappers", () => {
       principalType: "group",
       principalId: "group_admins",
       permission: "read",
+      source: "sso:oidc:https://idp.example.com",
       createdAt: new Date("2026-06-27T00:00:00.000Z"),
     });
 
+    // The SSO provenance column is internal and never leaks into API grants.
     expect(grant).toEqual({
       createdAt: "2026-06-27T00:00:00.000Z",
       id: "grant_1",
@@ -32,7 +34,6 @@ describe("access repository mappers", () => {
   it.each([
     "agent",
     "chat",
-    "data_connector",
     "file",
     "folder",
     "knowledge_base",
@@ -56,6 +57,7 @@ describe("access repository mappers", () => {
           principalType: "user",
           principalId: "user_1",
           permission: "read",
+          source: null,
           createdAt: new Date("2026-06-27T00:00:00.000Z"),
         }).resourceType,
       ).toBe(resourceType);

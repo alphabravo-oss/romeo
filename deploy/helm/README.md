@@ -89,7 +89,7 @@ keep `backup.enabled=false`, and provide a named owner plus a reviewed evidence
 reference, observation time, live status reference, and configured alerting for
 the database platform's scheduling, verification, age alert, and restore drill.
 A disabled CronJob without that external declaration is rejected. All-tenant
-connector sync, webhook/notification retry, retention, billing lifecycle, and
+webhook/notification retry, retention, billing lifecycle, and
 provider/voice synchronization are owned by the application's fenced internal
 coordinator by default; their former tenant-token CronJobs are rejected. Set
 both `env.SCHEDULED_TENANT_WORK_OWNER=external` and

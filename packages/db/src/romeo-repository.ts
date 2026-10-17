@@ -2,8 +2,6 @@ import {
   ROMEO_REPOSITORY_METHOD_NAMES,
   type RomeoRepository,
 } from "@romeo/core";
-import { sql } from "drizzle-orm";
-import { createHash } from "node:crypto";
 
 import type { RomeoDatabase } from "./client";
 import {
@@ -20,9 +18,7 @@ import {
   createCollaborationRepositoryFragment,
   createContentPolicyRepositoryFragment,
   createContentDeletionRepositoryFragment,
-  createDataConnectorRepositoryFragment,
   createDataDeletionRepositoryFragment,
-  createDelegatedOAuthRepositoryFragment,
   createFileRepositoryFragment,
   createGovernanceBillingRepositoryFragment,
   createGovernanceExportRepositoryFragment,
@@ -60,20 +56,6 @@ export function createPostgresRomeoRepositoryFromDatabase(
           ),
         ),
       ),
-    withDelegatedOAuthConnectionRefreshLock: async <T>(
-      connectionId: string,
-      work: (repository: RomeoRepository) => Promise<T>,
-    ): Promise<T> =>
-      db.transaction(async (tx) => {
-        await tx.execute(
-          sql`select pg_advisory_xact_lock(${advisoryLockKey(connectionId)}::bigint)`,
-        );
-        return work(
-          createPostgresRomeoRepositoryFromDatabase(
-            tx as unknown as RomeoDatabase,
-          ),
-        );
-      }),
     ...composeRepositoryFragments(
       createTenantIdentityRepositoryFragment(db),
       createAuthCredentialRepositoryFragment(db),
@@ -86,8 +68,6 @@ export function createPostgresRomeoRepositoryFromDatabase(
       createRunRepositoryFragment(db),
       createServerTableRepositoryFragment(db),
       createToolConnectorRepositoryFragment(db),
-      createDataConnectorRepositoryFragment(db),
-      createDelegatedOAuthRepositoryFragment(db),
       createOperationalRepositoryFragment(db),
       createContentPolicyRepositoryFragment(db),
       createContentDeletionRepositoryFragment(db),
@@ -110,10 +90,6 @@ export function createPostgresRomeoRepositoryFromDatabase(
 
   assertRepositoryMethods(repository);
   return repository;
-}
-
-function advisoryLockKey(value: string): bigint {
-  return createHash("sha256").update(value).digest().readBigInt64BE(0);
 }
 
 export function assertRepositoryMethods(repository: RomeoRepository): void {

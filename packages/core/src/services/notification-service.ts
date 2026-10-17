@@ -44,6 +44,7 @@ import {
   readNotificationPolicy,
   toNotificationPolicyReport,
 } from "./notification-policy-storage";
+import type { NotificationDestinationGuard } from "./notification-delivery-factory";
 import type { SecretResolver } from "./secret-resolver";
 
 export { readNotificationPolicy } from "./notification-policy-storage";
@@ -59,6 +60,7 @@ export class NotificationService {
     private readonly repository: RomeoRepository,
     private readonly deliverySender: NotificationDeliverySender = disabledNotificationDeliverySender,
     private readonly secretResolver?: SecretResolver,
+    private readonly destinationGuard?: NotificationDestinationGuard,
   ) {}
 
   list(subject: AuthSubject): Promise<UserNotification[]> {
@@ -127,6 +129,11 @@ export class NotificationService {
         400,
       );
     }
+    if (
+      this.destinationGuard !== undefined &&
+      typeof channel.config.url === "string"
+    )
+      await this.destinationGuard(channel.config.url);
     const created =
       await this.repository.createNotificationDeliveryChannel(channel);
     return toPublicNotificationDeliveryChannel(created);

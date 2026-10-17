@@ -1,26 +1,12 @@
 import type {
   DataRightsCoverageReport,
-  DataRightsRetentionEvidenceSummary,
   DataRightsStorageClassCoverage,
   DataRightsWorkflowCoverage,
 } from "../domain/entities";
-import { defaultDataRightsRetentionEvidence } from "./data-rights-retention-evidence";
 
 export function buildDataRightsCoverageReport(input: {
   orgId: string;
   generatedAt: string;
-  retentionEvidence?: {
-    operationalLogs: DataRightsRetentionEvidenceSummary;
-    backups: DataRightsRetentionEvidenceSummary;
-    redaction: {
-      backupLocationReturned: false;
-      evidenceFileBodiesReturned: false;
-      logContentReturned: false;
-      objectStoreKeysReturned: false;
-      rawEvidencePathsReturned: false;
-      secretValuesReturned: false;
-    };
-  };
 }): DataRightsCoverageReport {
   const deletionWorkflows: DataRightsWorkflowCoverage[] = [
     {
@@ -47,7 +33,6 @@ export function buildDataRightsCoverageReport(input: {
       evidence: [
         "DELETE /api/v1/knowledge-bases/{knowledgeBaseId}/sources/{sourceId}",
         "GET /api/v1/admin/rag/posture",
-        "pnpm smoke:compose:tiered-rag",
       ],
       limitations: [
         "Live external-vector restore/delete proof remains target-environment evidence.",
@@ -76,7 +61,7 @@ export function buildDataRightsCoverageReport(input: {
       id: "access_review_export",
       status: "implemented",
       scope:
-        "Role-scoped identity, grant, connector ownership, support access, and worker posture export.",
+        "Role-scoped identity, grant, tool risk, support access, and worker posture export.",
       evidence: [
         "GET /api/v1/access-review/report",
         "GET /api/v1/access-review/report.csv",
@@ -102,7 +87,7 @@ export function buildDataRightsCoverageReport(input: {
       id: "customer_content_export",
       status: "partial",
       scope:
-        "Governed JSON export across authorized org or workspace chat, prompt, knowledge, file, connector, workflow, usage, RAG/vector policy posture, and org-level background-job metadata records with explicit content and bounded object-byte flags.",
+        "Governed JSON export across authorized org or workspace chat, prompt, knowledge, file, workflow, usage, RAG/vector policy posture, and org-level background-job metadata records with explicit content and bounded object-byte flags.",
       evidence: [
         "POST /api/v1/governance/data-exports/preview",
         "POST /api/v1/governance/data-exports/execute",
@@ -136,8 +121,6 @@ export function buildDataRightsCoverageReport(input: {
     deletionWorkflows,
     exportWorkflows,
     storageClasses: storageClasses(),
-    retentionEvidence:
-      input.retentionEvidence ?? defaultDataRightsRetentionEvidence(),
     backupRetention: {
       status: "externally_governed",
       posture:
@@ -148,23 +131,22 @@ export function buildDataRightsCoverageReport(input: {
         "pnpm backup:object-store",
         "pnpm restore:object-store",
         "pnpm smoke:compose:backup-restore",
-        "pnpm evidence:data-rights-retention",
       ],
       limitations: [
         "Per-record deletion from immutable backups is not claimed.",
-        "Operators must document the selected backup retention window and deletion SLA for each deployment, then mount reviewed `romeo.data-rights-retention-evidence.v1` evidence when they want the API to report it as satisfied.",
+        "Operators must document the selected backup retention window and deletion SLA for each deployment.",
       ],
     },
     supportBundles: {
       status: "implemented",
-      evidence: ["pnpm support:bundle", "pnpm smoke:support-bundle-redaction"],
+      evidence: ["pnpm support:bundle"],
       redaction:
         "Support bundles summarize schemas, statuses, hashes, safe configuration posture, migration inventory, and log metadata only; they do not embed raw logs, report bodies, secrets, prompts, provider payloads, connector payloads, tokens, object keys, vector values, or document bodies.",
     },
     openGaps: [
       "Customer-content JSON export and object-store-backed JSON package creation are implemented for current Postgres/object-store records; separate large binary archive formats remain future work only if a selected deployment requires them.",
       "Live external-vector restore/delete proof remains deployment evidence.",
-      "Operational-log and backup destruction remain external retention controls until reviewed `romeo.data-rights-retention-evidence.v1` files are mounted for the selected deployment.",
+      "Operational-log and backup destruction remain external retention controls owned by the selected deployment.",
       "Storage-class deletion coverage should expand as new persistent product surfaces are added.",
     ],
   };

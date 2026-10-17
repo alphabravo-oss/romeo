@@ -33,8 +33,6 @@ import {
   BillingPanel,
   CapabilityAdminPanel,
   ChatExperiencePanel,
-  ConnectedAppsPanel,
-  DataConnectorPanel,
   GovernancePanel,
   GroupsPanel,
   ImpersonationPanel,
@@ -61,7 +59,6 @@ import adminCss from "../styles/admin.css?url";
 import { validateAdminSearch } from "./-admin-route-search";
 import {
   resolveAdminAccessView,
-  resolveAdminConnectionView,
   resolveAdminProviderView,
   resolveAdminUsageView,
 } from "./-admin-route-views";
@@ -106,7 +103,6 @@ function AdminPage() {
   useLocaleNamespaces(localeNamespacesForAdminSection(section));
   const providerView = resolveAdminProviderView(search.view);
   const usageView = resolveAdminUsageView(search.view);
-  const connectionView = resolveAdminConnectionView(search.view);
   const accessView = resolveAdminAccessView(search.view);
   const navigationGroups = useMemo(
     () =>
@@ -288,31 +284,10 @@ function AdminPage() {
           {section === "chat-experience" ? <ChatExperiencePanel /> : null}
 
           {section === "connections" ? (
-            <div className="grid gap-4">
-              <AdminViewNav
-                active={connectionView}
-                ariaLabel={t("navConnections")}
-                items={[
-                  ["sources", t("connectorSourcesTab")],
-                  ["imports", t("connectorImportsTab")],
-                  ["catalog", t("connectorCatalogTab")],
-                  ["tools", t("connectorToolsTab")],
-                ]}
-                section="connections"
-              />
-              {connectionView === "tools" ? (
-                <ToolConnectorPanel
-                  onSelectionChange={updateToolConnectorSearch}
-                  selectedConnectorId={search.toolConnector}
-                />
-              ) : null}
-              {connectionView !== "tools" ? (
-                <DataConnectorPanel
-                  view={connectionView as "catalog" | "imports" | "sources"}
-                  workspaceId={admin.workspace?.id}
-                />
-              ) : null}
-            </div>
+            <ToolConnectorPanel
+              onSelectionChange={updateToolConnectorSearch}
+              selectedConnectorId={search.toolConnector}
+            />
           ) : null}
 
           {section === "governance" ? (
@@ -382,8 +357,6 @@ function AdminPage() {
           {section === "impersonation" ? <ImpersonationPanel /> : null}
 
           {section === "auth-providers" ? <AuthProvidersPanel /> : null}
-
-          {section === "connected-apps" ? <ConnectedAppsPanel /> : null}
 
           {section === "webhooks" ? <WebhooksPanel /> : null}
 

@@ -10,7 +10,6 @@ import {
 const nonNegativeInteger = z.number().int().nonnegative();
 const boundedPositiveInteger = (maximum: number) =>
   z.number().int().min(1).max(maximum);
-const evidenceCheckStatus = z.enum(["failed", "passed", "unknown"]);
 
 export const EdgeSecurityPostureCheckSchema = z
   .strictObject({
@@ -24,95 +23,6 @@ export const EdgeSecurityPostureCheckSchema = z
     ),
   })
   .openapi("EdgeSecurityPostureCheck");
-
-const LiveEdgeEvidenceSchema = z.strictObject({
-  configured: z.boolean(),
-  source: z.enum(["configured_file", "not_configured"]),
-  status: z.enum([
-    "failed",
-    "invalid",
-    "not_configured",
-    "planned",
-    "satisfied",
-  ]),
-  schemaVersion: z.literal("romeo.live-edge-enforcement.v1").optional(),
-  generatedAt: z.iso.datetime().optional(),
-  evidenceStatus: z.enum(["failed", "passed", "planned", "unknown"]).optional(),
-  mode: z.enum(["dry-run", "live", "unknown"]).optional(),
-  invalidReason: z
-    .enum(["invalid_json", "read_failed", "schema_mismatch"])
-    .optional(),
-  failureCodes: z.array(z.string()),
-  target: z.strictObject({
-    deployment: z.enum(["edge", "unknown"]),
-    originConfigured: z.boolean(),
-  }),
-  checks: z.strictObject({
-    total: nonNegativeInteger,
-    requiredTotal: nonNegativeInteger,
-    requiredPresent: nonNegativeInteger,
-    missingRequired: z.array(
-      z.enum([
-        "security_headers_present",
-        "waf_or_gateway_probe_blocked",
-        "oversized_request_rejected",
-        "public_rate_limit_enforced",
-        "raw_probe_payload_not_retained",
-      ]),
-    ),
-  }),
-  securityHeaders: z.strictObject({
-    checked: z.boolean(),
-    status: evidenceCheckStatus,
-    matchedRequiredCount: nonNegativeInteger,
-    missingRequiredCount: nonNegativeInteger,
-    missingRequired: z.array(
-      z.enum([
-        "x-content-type-options",
-        "x-frame-options",
-        "referrer-policy",
-        "cross-origin-opener-policy",
-        "permissions-policy",
-      ]),
-    ),
-    hstsChecked: z.boolean(),
-    headerValuesReturned: z.boolean(),
-  }),
-  waf: z.strictObject({
-    checked: z.boolean(),
-    status: evidenceCheckStatus,
-    httpStatus: nonNegativeInteger.optional(),
-    expectedStatusCount: nonNegativeInteger,
-    expectedHeaderPresent: z.boolean().optional(),
-    responseBodyReturned: z.boolean(),
-  }),
-  requestBodyLimit: z.strictObject({
-    checked: z.boolean(),
-    status: evidenceCheckStatus,
-    bytesSent: nonNegativeInteger,
-    httpStatus: nonNegativeInteger.optional(),
-    expectedStatusCount: nonNegativeInteger,
-    requestBodyReturned: z.boolean(),
-    responseBodyReturned: z.boolean(),
-  }),
-  rateLimit: z.strictObject({
-    checked: z.boolean(),
-    status: evidenceCheckStatus,
-    attempts: nonNegativeInteger,
-    blockedAt: z.number().int().min(1).optional(),
-    expectedStatus: nonNegativeInteger.optional(),
-    expectedStatusObserved: z.boolean(),
-    responseBodyReturned: z.boolean(),
-  }),
-  redaction: z.strictObject({
-    rawApiKeyReturned: z.boolean(),
-    rawHeaderValuesReturned: z.boolean(),
-    rawProbePayloadReturned: z.boolean(),
-    rawQueryValuesReturned: z.boolean(),
-    rawRequestBodiesReturned: z.boolean(),
-    rawResponseBodiesReturned: z.boolean(),
-  }),
-});
 
 export const EdgeSecurityPostureReportSchema = z
   .strictObject({
@@ -139,8 +49,6 @@ export const EdgeSecurityPostureReportSchema = z
     ingress: z.strictObject({
       allowedOriginRuleCount: nonNegativeInteger,
       desiredWafMode: z.enum(["disabled", "monitor", "block"]),
-      observedWafEnforcement: z.enum(["unknown", "failed", "block"]),
-      observedWafAt: z.iso.datetime().optional(),
       wafMode: z.enum(["disabled", "monitor", "block"]),
     }),
     limits: z.strictObject({
@@ -169,13 +77,10 @@ export const EdgeSecurityPostureReportSchema = z
       referrerPolicy: z.literal("no-referrer"),
       strictTransportSecurity: z.boolean(),
     }),
-    liveEvidence: LiveEdgeEvidenceSchema,
     checks: z.array(EdgeSecurityPostureCheckSchema),
     redaction: z.strictObject({
-      evidenceFileBodyReturned: z.literal(false),
       rawAllowedOriginsReturned: z.literal(false),
       rawAppOriginReturned: z.literal(false),
-      rawEvidencePathReturned: z.literal(false),
       rawIngressAnnotationsReturned: z.literal(false),
       rawProxyIpRangesReturned: z.literal(false),
       rawSecretsReturned: z.literal(false),

@@ -1,4 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   index,
   integer,
@@ -24,11 +26,17 @@ export const resourceGrants = pgTable(
     principalType: principalType("principal_type").notNull(),
     principalId: text("principal_id").notNull(),
     permission: resourcePermission("permission").notNull(),
+    // Identity-provider mapping that created this grant; null for grants
+    // created manually, by SCIM, or before migration 0047.
+    source: text("source"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => ({
+    resourceGrantsSourceIdx: index("resource_grants_source_idx")
+      .on(table.orgId, table.principalId, table.source)
+      .where(sql`${table.source} is not null`),
     resourceGrantLookupIdx: index("resource_grant_lookup_idx").on(
       table.orgId,
       table.resourceType,
@@ -120,6 +128,9 @@ export const localPasswordCredentials = pgTable(
     emailNormalized: text("email_normalized").notNull(),
     passwordHash: text("password_hash").notNull(),
     failedAttemptCount: integer("failed_attempt_count").notNull().default(0),
+    mfaFailedAttemptCount: integer("mfa_failed_attempt_count")
+      .notNull()
+      .default(0),
     lockedUntil: timestamp("locked_until", { withTimezone: true }),
     passwordUpdatedAt: timestamp("password_updated_at", {
       withTimezone: true,
@@ -158,6 +169,7 @@ export const localMfaFactors = pgTable(
     confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
     disabledAt: timestamp("disabled_at", { withTimezone: true }),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    lastTotpStep: bigint("last_totp_step", { mode: "number" }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -221,6 +233,7 @@ export const localMfaChallenges = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    attemptCount: integer("attempt_count").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

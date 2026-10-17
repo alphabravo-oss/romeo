@@ -1611,15 +1611,6 @@ function assertComposerLocalization() {
       webhooksTitle: "Webhooks",
       webhooksAdd: "Añadir webhook",
       webhooksNew: "Nuevo webhook",
-      connectedAppsTitle: "Aplicaciones conectadas",
-      connectedAppsPosture: "Estado",
-      connectedAppsAvailableProviders: "Proveedores disponibles",
-      connectorSyncNone: "Todavía no hay sincronizaciones.",
-      connectorSyncStarted: "Iniciada",
-      dataConnectors: "Conectores de datos",
-      connectorCatalog: "Catálogo",
-      connectorAdd: "Añadir conector",
-      connectorNew: "Nuevo conector de datos",
       skipToChat: "Saltar al chat",
       usageTitle: "Uso",
       usageTotals: "Totales",
@@ -1662,7 +1653,6 @@ function assertComposerLocalization() {
       contextInspector: "Inspector de contexto",
       governedWebSearch: "Búsqueda web gobernada",
       governance: "Gobernanza",
-      gaEvidence: "Evidencia de GA",
       goTo: "Ir a",
       keyboardShortcuts: "Atajos de teclado",
       lifecycleActions: "Acciones de ciclo de vida",
@@ -1739,15 +1729,6 @@ function assertComposerLocalization() {
       webhooksTitle: "Webhooks",
       webhooksAdd: "Ajouter un webhook",
       webhooksNew: "Nouveau webhook",
-      connectedAppsTitle: "Applications connectées",
-      connectedAppsPosture: "État",
-      connectedAppsAvailableProviders: "Fournisseurs disponibles",
-      connectorSyncNone: "Aucune synchronisation.",
-      connectorSyncStarted: "Démarrée",
-      dataConnectors: "Connecteurs de données",
-      connectorCatalog: "Catalogue",
-      connectorAdd: "Ajouter un connecteur",
-      connectorNew: "Nouveau connecteur de données",
       skipToChat: "Accéder à la discussion",
       usageTitle: "Utilisation",
       usageTotals: "Totaux",
@@ -1791,7 +1772,6 @@ function assertComposerLocalization() {
       contextInspector: "Inspecteur de contexte",
       governedWebSearch: "Recherche web gouvernée",
       governance: "Gouvernance",
-      gaEvidence: "Preuves de disponibilité générale",
       goTo: "Aller à",
       keyboardShortcuts: "Raccourcis clavier",
       lifecycleActions: "Actions de cycle de vie",
@@ -2279,40 +2259,7 @@ function assertComposerLocalization() {
       connectionsAdmin.includes(locale.toolConnectors),
       `${locale.code} did not translate tool-connector administration`,
     );
-    run("open", `${baseUrl}/admin?section=connections&view=imports`);
-    waitForDocumentReady();
-    const importsAdmin = run("get", "text", "body");
-    assert(
-      importsAdmin.includes(locale.connectorSyncNone) ||
-        importsAdmin.includes(locale.connectorSyncStarted),
-      `${locale.code} did not translate connector sync history`,
-    );
-    run("open", `${baseUrl}/admin?section=connections&view=catalog`);
-    waitForDocumentReady();
-    const catalogAdmin = run("get", "text", "body");
-    assert(
-      catalogAdmin.includes(locale.dataConnectors) &&
-        catalogAdmin.includes(locale.connectorCatalog),
-      `${locale.code} did not translate data-connector administration`,
-    );
-    run("open", `${baseUrl}/admin?section=connections&view=catalog`);
-    waitForDocumentReady();
-    run(
-      "wait",
-      "--fn",
-      `[...document.querySelectorAll("button")].some((button) => button.textContent?.trim() === ${JSON.stringify(locale.connectorAdd)} && !button.disabled)`,
-    );
-    run(
-      "eval",
-      `([...document.querySelectorAll("button")].find((button) => button.textContent?.trim() === ${JSON.stringify(locale.connectorAdd)} && !button.disabled))?.click()`,
-    );
-    run("wait", ".rm-ui-dialog");
-    assert(
-      run("get", "text", ".rm-ui-dialog").includes(locale.connectorNew),
-      `${locale.code} did not translate data-connector creation`,
-    );
-    run("press", "Escape");
-    run("open", `${baseUrl}/admin?section=connections&view=tools`);
+    run("open", `${baseUrl}/admin?section=connections`);
     waitForDocumentReady();
     run(
       "wait",
@@ -2444,10 +2391,6 @@ function assertComposerLocalization() {
     assert(
       postureAdmin.includes(locale.systemPosture),
       `${locale.code} did not translate system posture administration`,
-    );
-    assert(
-      postureAdmin.includes(locale.gaEvidence),
-      `${locale.code} did not translate GA evidence administration`,
     );
     run("open", `${baseUrl}/admin?section=abuse`);
     waitForDocumentReady();
@@ -2609,18 +2552,6 @@ function assertComposerLocalization() {
       `${locale.code} did not translate webhook creation`,
     );
     run("press", "Escape");
-    run("open", `${baseUrl}/admin?section=connected-apps`);
-    waitForDocumentReady();
-    const connectedAppsAdmin = run("get", "text", "body");
-    assert(
-      connectedAppsAdmin.includes(locale.connectedAppsTitle),
-      `${locale.code} did not translate connected-app administration`,
-    );
-    assert(
-      connectedAppsAdmin.includes(locale.connectedAppsPosture) &&
-        connectedAppsAdmin.includes(locale.connectedAppsAvailableProviders),
-      `${locale.code} did not translate connected-app posture`,
-    );
     run("open", `${baseUrl}/admin?section=access`);
     waitForDocumentReady();
     const accessAdmin = run("get", "text", "body");

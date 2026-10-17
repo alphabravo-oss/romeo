@@ -184,5 +184,7 @@
   "reasoningAdjustedSummaryUnavailable": "La persistencia del resumen de razonamiento no está disponible.",
   "reasoningAdjustedDialectUnsupported": "El protocolo del proveedor no admite esta configuración.",
   "reasoningAdjustedModelUnsupported": "El modelo o proveedor seleccionado no admite esta configuración.",
-  "turnRequiresCapabilities": "Este turno requiere: {{capabilities}}."
+  "turnRequiresCapabilities": "Este turno requiere: {{capabilities}}.",
+  "markdownRemoteImageLoad": "Cargar imagen",
+  "markdownRemoteImageBlocked": "Imagen externa no cargada:"
 }

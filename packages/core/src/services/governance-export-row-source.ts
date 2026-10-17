@@ -62,24 +62,6 @@ export async function* governanceExportRowPages(input: {
     yield* chatPages(input, workspace.id);
     yield* knowledgePages(input, workspace.id, objectBudget);
     yield* filePages(input, workspace.id, objectBudget);
-
-    const connectors = await input.repository.listDataConnectors(
-      input.subject.orgId,
-      workspace.id,
-    );
-    yield* batches(
-      "dataConnectors",
-      "data_connectors",
-      sanitizeRows(connectors, input.request),
-    );
-    for (const connector of connectors)
-      yield* nativePages(input, {
-        countKey: "dataConnectorSyncs",
-        dataset: "data_connector_syncs",
-        parentId: connector.id,
-        resource: "data_connector_sync_runs",
-        workspaceId: workspace.id,
-      });
   }
 
   yield* nativePages(input, {

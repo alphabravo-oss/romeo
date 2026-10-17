@@ -11,8 +11,6 @@ export * from "./chats";
 export * from "./collaboration";
 export * from "./content-policy";
 export * from "./content-deletion";
-export * from "./data-connectors";
-export * from "./delegated-oauth";
 export * from "./enums";
 export * from "./evals";
 export * from "./files";

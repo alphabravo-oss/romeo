@@ -93,6 +93,25 @@ describe("TranscriptWindow", () => {
     expect(html).toContain('aria-label="Conversation transcript"');
     expect(html.indexOf("message_0")).toBeLessThan(html.indexOf("message_74"));
     expect(html).not.toContain("virtualized");
+    expect(html).toContain('aria-busy="false"');
+  });
+
+  it("marks the feed busy while a response streams in", () => {
+    const html = renderToString(
+      <TranscriptWindow
+        accessibleDescription="All messages"
+        busy
+        feedLabel="Conversation transcript"
+        getScrollElement={() => null}
+        items={rows.slice(0, 2)}
+        renderItem={(row) => <article key={row.id}>{row.id}</article>}
+        showAllLabel="Show all"
+        useWindowedLabel="Use window"
+        windowedDescription="Nearby messages"
+      />,
+    );
+
+    expect(html).toMatch(/aria-busy="true"[^>]*role="feed"/u);
   });
 
   it("bounds mounted rows and expands before browser find", async () => {

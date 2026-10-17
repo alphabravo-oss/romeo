@@ -6,7 +6,6 @@ import {
   runBillingLifecycleEnforcementWorker,
 } from "./billing-worker";
 import { runBrowserAutomationWorker } from "./browser-automation-worker";
-import { runDataConnectorSyncWorker } from "./data-connector-worker";
 import { runKnowledgeExtractionWorker } from "./knowledge-worker";
 import { runNotificationRetryWorker } from "./notification-worker";
 import { runRetentionEnforcementWorker } from "./retention-worker";
@@ -1445,37 +1444,6 @@ describe("worker lifecycle controls", () => {
       ],
     });
     expect(output).not.toContain(sentinel);
-  });
-
-  it("exits the data connector loop after an abort without entering the next sleep", async () => {
-    const { io, stdout } = createOutput();
-    const controller = new AbortController();
-    let listCalls = 0;
-    let slept = false;
-
-    const exitCode = await runDataConnectorSyncWorker({
-      client: {
-        dataConnectors: {
-          list: async () => {
-            listCalls += 1;
-            controller.abort();
-            return [];
-          },
-          sync: async () => ({ id: "sync_1", status: "completed" }),
-        },
-      } as never,
-      intervalMs: 60_000,
-      io,
-      signal: controller.signal,
-      sleep: async () => {
-        slept = true;
-      },
-    });
-
-    expect(exitCode).toBe(0);
-    expect(listCalls).toBe(1);
-    expect(slept).toBe(false);
-    expect(stdout()).toContain('"iteration": 1');
   });
 
   it("exits the knowledge extraction loop after an abort without entering the next sleep", async () => {

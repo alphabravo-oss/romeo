@@ -141,7 +141,54 @@ export abstract class InMemoryAuthRepository extends InMemoryIdentityRepository 
   async updateLocalPasswordCredential(
     credential: E.LocalPasswordCredential,
   ): Promise<E.LocalPasswordCredential> {
-    return replaceById(this.data.localPasswordCredentials, credential);
+    // Like Postgres, a generic update never writes the MFA failure counter;
+    // only the dedicated atomic MFA methods change it.
+    const current = this.data.localPasswordCredentials.find(
+      (item) => item.id === credential.id,
+    );
+    const next: E.LocalPasswordCredential = { ...credential };
+    delete next.mfaFailedAttemptCount;
+    if (current?.mfaFailedAttemptCount !== undefined)
+      next.mfaFailedAttemptCount = current.mfaFailedAttemptCount;
+    return replaceById(this.data.localPasswordCredentials, next);
+  }
+
+  async recordFailedLocalMfaAttempt(input: {
+    credentialId: string;
+    attemptedAt: string;
+    lockedUntil: string;
+    maxFailedAttempts: number;
+  }): Promise<E.LocalPasswordCredential | undefined> {
+    const current = this.data.localPasswordCredentials.find(
+      (credential) => credential.id === input.credentialId,
+    );
+    if (current === undefined) return undefined;
+    const mfaFailedAttemptCount = (current.mfaFailedAttemptCount ?? 0) + 1;
+    return replaceById(this.data.localPasswordCredentials, {
+      ...current,
+      mfaFailedAttemptCount,
+      updatedAt: input.attemptedAt,
+      ...(mfaFailedAttemptCount >= input.maxFailedAttempts
+        ? { lockedUntil: input.lockedUntil }
+        : {}),
+    });
+  }
+
+  async resetFailedLocalMfaAttempts(input: {
+    credentialId: string;
+    updatedAt: string;
+  }): Promise<void> {
+    const current = this.data.localPasswordCredentials.find(
+      (credential) => credential.id === input.credentialId,
+    );
+    if (current === undefined || (current.mfaFailedAttemptCount ?? 0) === 0)
+      return;
+    const next: E.LocalPasswordCredential = {
+      ...current,
+      updatedAt: input.updatedAt,
+    };
+    delete next.mfaFailedAttemptCount;
+    replaceById(this.data.localPasswordCredentials, next);
   }
 
   async recordFailedLocalPasswordAttempt(input: {
@@ -196,7 +243,46 @@ export abstract class InMemoryAuthRepository extends InMemoryIdentityRepository 
   async updateLocalMfaFactor(
     factor: E.LocalMfaFactor,
   ): Promise<E.LocalMfaFactor> {
-    return replaceById(this.data.localMfaFactors, factor);
+    return replaceById(
+      this.data.localMfaFactors,
+      this.withStoredTotpStep(factor),
+    );
+  }
+
+  async acceptLocalMfaTotpStep(input: {
+    factorId: string;
+    timeStep: number;
+    usedAt: string;
+  }): Promise<E.LocalMfaFactor | undefined> {
+    const current = this.data.localMfaFactors.find(
+      (factor) => factor.id === input.factorId,
+    );
+    if (
+      current === undefined ||
+      current.type !== "totp" ||
+      current.status === "disabled" ||
+      (current.lastTotpStep !== undefined &&
+        current.lastTotpStep >= input.timeStep)
+    )
+      return undefined;
+    return replaceById(this.data.localMfaFactors, {
+      ...current,
+      lastTotpStep: input.timeStep,
+      lastUsedAt: input.usedAt,
+      updatedAt: input.usedAt,
+    });
+  }
+
+  /** Generic factor writes never move the replay watermark (as in Postgres). */
+  private withStoredTotpStep(factor: E.LocalMfaFactor): E.LocalMfaFactor {
+    const current = this.data.localMfaFactors.find(
+      (item) => item.id === factor.id,
+    );
+    const next: E.LocalMfaFactor = { ...factor };
+    delete next.lastTotpStep;
+    if (current?.lastTotpStep !== undefined)
+      next.lastTotpStep = current.lastTotpStep;
+    return next;
   }
 
   async consumeLocalMfaFactor(input: {
@@ -206,9 +292,15 @@ export abstract class InMemoryAuthRepository extends InMemoryIdentityRepository 
     const current = this.data.localMfaFactors.find(
       (factor) => factor.id === input.factor.id,
     );
-    if (current?.secretEncrypted !== input.expectedSecretEncrypted)
+    if (
+      current?.secretEncrypted !== input.expectedSecretEncrypted ||
+      current.status !== "active"
+    )
       return undefined;
-    return replaceById(this.data.localMfaFactors, input.factor);
+    return replaceById(
+      this.data.localMfaFactors,
+      this.withStoredTotpStep(input.factor),
+    );
   }
 
   async createLocalMfaChallenge(
@@ -240,6 +332,32 @@ export abstract class InMemoryAuthRepository extends InMemoryIdentityRepository 
     return replaceById(this.data.localMfaChallenges, {
       ...challenge,
       consumedAt: input.consumedAt,
+    });
+  }
+
+  async claimLocalMfaChallengeAttempt(input: {
+    id: string;
+    orgId: string;
+    userId: string;
+    attemptedAt: string;
+    maxAttempts: number;
+  }): Promise<E.LocalMfaChallenge | undefined> {
+    const challenge = this.data.localMfaChallenges.find(
+      (item) => item.id === input.id,
+    );
+    const attemptCount = challenge?.attemptCount ?? 0;
+    if (
+      challenge === undefined ||
+      challenge.consumedAt !== undefined ||
+      challenge.orgId !== input.orgId ||
+      challenge.userId !== input.userId ||
+      Date.parse(challenge.expiresAt) <= Date.parse(input.attemptedAt) ||
+      attemptCount >= input.maxAttempts
+    )
+      return undefined;
+    return replaceById(this.data.localMfaChallenges, {
+      ...challenge,
+      attemptCount: attemptCount + 1,
     });
   }
 

@@ -22,6 +22,7 @@ import {
 } from "./notification-delivery-factory";
 import type { NotificationDeliverySender } from "./notification-delivery";
 import { createOidcRuntimeCache, type OidcRuntimeCache } from "./oidc-client";
+import { lookupNetworkHost } from "./outbound-network-policy";
 import type { QuotaCoordinator } from "./quota-coordination";
 import { BoundedQdrantSdkClientPool } from "./qdrant-sdk-client";
 import type { QdrantSdkClientProvider } from "./qdrant-sdk-client";
@@ -111,8 +112,10 @@ export function createServiceRuntimeDependencies(
     ...(options.notificationSmtpSendMail === undefined
       ? {}
       : { smtpSendMail: options.notificationSmtpSendMail }),
+    // Same egress posture as generic webhooks: resolve, reject private
+    // answers, and pin the socket. Tests inject a raw fetch instead.
     ...(options.webhookFetch === undefined
-      ? {}
+      ? { hostLookup: lookupNetworkHost }
       : { fetchImpl: options.webhookFetch }),
   };
   const readinessState =

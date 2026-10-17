@@ -11,9 +11,7 @@ import {
   createCollaborationRepositoryFragment,
   createContentPolicyRepositoryFragment,
   createContentDeletionRepositoryFragment,
-  createDataConnectorRepositoryFragment,
   createDataDeletionRepositoryFragment,
-  createDelegatedOAuthRepositoryFragment,
   createFileRepositoryFragment,
   createGovernanceBillingRepositoryFragment,
   createKnowledgeEmbeddingRepositoryFragment,
@@ -112,7 +110,9 @@ describe("repository fragment composition", () => {
       "getSsoOidcSettings",
       "getWorkspace",
       "listAllOrganizations",
+      "listEnabledSsoOidcSettingsByIssuer",
       "listGroupMemberships",
+      "listGroupMembershipsBySource",
       "listGroups",
       "listOrganizations",
       "listUsers",
@@ -132,6 +132,8 @@ describe("repository fragment composition", () => {
     const fragment = createAuthCredentialRepositoryFragment({} as never);
 
     expect(Object.keys(fragment).sort()).toEqual([
+      "acceptLocalMfaTotpStep",
+      "claimLocalMfaChallengeAttempt",
       "consumeLocalMfaChallenge",
       "consumeLocalMfaFactor",
       "consumeSamlAuthRequest",
@@ -159,7 +161,9 @@ describe("repository fragment composition", () => {
       "listLocalMfaFactorsForOrg",
       "listServiceAccounts",
       "listUserSessions",
+      "recordFailedLocalMfaAttempt",
       "recordFailedLocalPasswordAttempt",
+      "resetFailedLocalMfaAttempts",
       "rotateDeviceAuthorization",
       "updateApiKey",
       "updateDeviceAuthorization",
@@ -349,36 +353,6 @@ describe("repository fragment composition", () => {
     ]);
   });
 
-  it("exposes the data connector methods as a composable fragment", () => {
-    const fragment = createDataConnectorRepositoryFragment({} as never);
-
-    expect(Object.keys(fragment).sort()).toEqual([
-      "claimDataConnectorSync",
-      "createDataConnector",
-      "createDataConnectorSync",
-      "finishDataConnectorSync",
-      "getDataConnector",
-      "listDataConnectorSyncs",
-      "listDataConnectors",
-      "renewDataConnectorSyncLease",
-      "updateDataConnector",
-      "updateDataConnectorSync",
-    ]);
-  });
-
-  it("exposes delegated OAuth key-usage inventory as a composable fragment", () => {
-    const fragment = createDelegatedOAuthRepositoryFragment({} as never);
-
-    expect(Object.keys(fragment).sort()).toEqual([
-      "countDelegatedOAuthTokenKeyUsage",
-      "createDelegatedOAuthConnection",
-      "getDelegatedOAuthConnection",
-      "getDelegatedOAuthConnectionByProviderAccount",
-      "listDelegatedOAuthConnections",
-      "updateDelegatedOAuthConnection",
-    ]);
-  });
-
   it("exposes the operational audit, usage, and job methods as a composable fragment", () => {
     const fragment = createOperationalRepositoryFragment({} as never);
 
@@ -512,6 +486,7 @@ describe("repository fragment composition", () => {
       "deleteResourceGrant",
       "deleteResourceGrantsForPrincipal",
       "listResourceGrants",
+      "listResourceGrantsBySource",
     ]);
   });
 

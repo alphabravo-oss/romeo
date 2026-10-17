@@ -24,10 +24,10 @@ enumeration surface; clients continue receiving the existing stable error
 envelope and may map its code to localized copy. Operators use source-controlled
 registry metadata and request IDs.
 
-The registry intentionally preserves five pre-existing multi-status codes as
-explicit compatibility exceptions: `delegated_oauth_scope_invalid`,
-`knowledge_retrieval_plan_empty`, `managed_secret_external_write_failed`,
-`saml_request_state_invalid`, and `scim_error`. New exceptions fail the policy
+The registry intentionally preserves four pre-existing multi-status codes as
+explicit compatibility exceptions: `knowledge_retrieval_plan_empty`,
+`managed_secret_external_write_failed`, `saml_request_state_invalid`, and
+`scim_error`. New exceptions fail the policy
 gate. These should be split into semantically distinct codes only through the
 API evolution policy, not silently changed in place.
 

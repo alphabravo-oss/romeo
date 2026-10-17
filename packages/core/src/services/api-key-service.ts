@@ -180,7 +180,6 @@ export class ApiKeyService {
     const groupIds = new Set(
       memberships.map((membership) => membership.groupId),
     );
-    if (user.id === "user_dev_admin") groupIds.add("group_admins");
     return {
       id: user.id,
       type: "user",

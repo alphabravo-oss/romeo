@@ -22,10 +22,6 @@ export interface ProductionEnvironment {
   BROWSER_AUTOMATION_WORKER_ENABLED: boolean;
   CLAMAV_ADDRESS: string;
   DATABASE_URL: string;
-  DELEGATED_OAUTH_GITHUB_CLIENT_ID: string;
-  DELEGATED_OAUTH_GITHUB_CLIENT_SECRET: string;
-  DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY: string;
-  DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY_PREVIOUS: string;
   DEV_SEEDED_LOGIN: boolean;
   EDGE_TRUSTED_PROXY_CIDRS: string;
   EDGE_TRUSTED_PROXY_MODE: string;
@@ -243,14 +239,6 @@ export function requireNonEmpty(
     env,
     context,
   );
-}
-
-export function delegatedOAuthConfigured(env: ProductionEnvironment): boolean {
-  return [
-    env.DELEGATED_OAUTH_GITHUB_CLIENT_ID,
-    env.DELEGATED_OAUTH_GITHUB_CLIENT_SECRET,
-    env.DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY,
-  ].some((value) => value.trim().length > 0);
 }
 
 export function parseUrl(value: string, protocols: string[]): URL | undefined {

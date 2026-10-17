@@ -1,7 +1,4 @@
 import { createHash } from "node:crypto";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { deflateRawSync } from "node:zlib";
 
 import { describe, expect, it, vi } from "vitest";
@@ -32,13 +29,6 @@ import type {
   SamlClientFactory,
   SamlValidatedProfile,
 } from "./services/saml-client";
-
-function openWebUiBridgeEnv(overrides: Record<string, string> = {}) {
-  return testEnv({
-    OPENWEBUI_COMPATIBILITY_ENABLED: "true",
-    ...overrides,
-  });
-}
 
 function browserMutationHeaders(
   cookie: string,
@@ -118,69 +108,7 @@ function createOoxmlTestZip(
   return Buffer.concat([...localFiles, ...centralDirectory, end]);
 }
 
-const browserAutomationLiveRequiredChecks = [
-  "reviewed_runner_sandbox",
-  "network_denial_enforced",
-  "worker_crash_retry",
-  "retention_worker_execution",
-  "pod_log_redaction",
-] as const;
-
-function browserAutomationLiveEvidence(
-  overrides: Record<string, unknown> = {},
-) {
-  return {
-    schemaVersion: "romeo.browser-automation-live-evidence.v1",
-    status: "passed",
-    mode: "live",
-    deployment: "kubernetes",
-    generatedAt: "2026-01-01T00:00:00.000Z",
-    checks: [...browserAutomationLiveRequiredChecks],
-    runnerSandbox: {
-      reviewedRunnerSandbox: true,
-      isolatedContextPerTask: true,
-      runnerProcessIsolated: true,
-      targetOriginOnly: true,
-    },
-    networkDenial: {
-      privateNetworkDenied: true,
-      cniOrNetworkPolicyDenied: true,
-      dnsRebindingDenied: true,
-      deniedNetworkCount: 1,
-      blockedTargetCount: 1,
-    },
-    crashRetry: {
-      workerCrashRetryVerified: true,
-      reclaimedAttempt: 2,
-      completedAfterRetry: true,
-    },
-    retention: {
-      workerExecutionVerified: true,
-      deletedArtifactCount: 1,
-      cleanedJobCount: 1,
-    },
-    logRedaction: {
-      podLogRedactionVerified: true,
-      workerLogRedactionVerified: true,
-      podLogScanCount: 1,
-      workerLogScanCount: 1,
-      rawTaskSentinelHitCount: 0,
-      rawPageSentinelHitCount: 0,
-      secretSentinelHitCount: 0,
-    },
-    redaction: {
-      artifactBytesReturned: false,
-      rawEvidencePathsReturned: false,
-      rawPageContentReturned: false,
-      rawRunnerUrlReturned: false,
-      rawTaskTextReturned: false,
-      secretValuesReturned: false,
-    },
-    ...overrides,
-  };
-}
-
-describe("Open WebUI-class governed chat extensions", () => {
+describe("governed chat extensions", () => {
   it("can construct request-only API instances without background workers", async () => {
     const repository = new InMemoryRomeoRepository();
     const listOrganizations = vi.spyOn(repository, "listAllOrganizations");
@@ -2181,147 +2109,6 @@ describe("Open WebUI-class governed chat extensions", () => {
   });
 });
 
-const liveEdgeRequiredChecks = [
-  "security_headers_present",
-  "waf_or_gateway_probe_blocked",
-  "oversized_request_rejected",
-  "public_rate_limit_enforced",
-  "raw_probe_payload_not_retained",
-] as const;
-
-const liveEdgeRequiredHeaders = [
-  "x-content-type-options",
-  "x-frame-options",
-  "referrer-policy",
-  "cross-origin-opener-policy",
-  "permissions-policy",
-] as const;
-
-function liveEdgeEvidence(overrides: Record<string, unknown> = {}) {
-  return {
-    schemaVersion: "romeo.live-edge-enforcement.v1",
-    generatedAt: "2026-01-01T00:00:00.000Z",
-    status: "passed",
-    mode: "live",
-    target: {
-      deployment: "edge",
-      origin: "https://edge.internal.example",
-    },
-    checks: [...liveEdgeRequiredChecks],
-    securityHeaders: {
-      status: "passed",
-      matched: [...liveEdgeRequiredHeaders],
-      headerValuesReturned: false,
-    },
-    waf: {
-      status: "passed",
-      httpStatus: 403,
-      expectedStatuses: [403, 406, 429],
-      responseBodyReturned: false,
-    },
-    requestBodyLimit: {
-      status: "passed",
-      bytesSent: 1048576,
-      httpStatus: 413,
-      expectedStatuses: [413],
-      requestBodyReturned: false,
-      responseBodyReturned: false,
-    },
-    rateLimit: {
-      status: "passed",
-      attempts: 8,
-      blockedAt: 8,
-      expectedStatus: 429,
-      statuses: [200, 200, 200, 200, 200, 200, 200, 429],
-      responseBodyReturned: false,
-    },
-    redaction: {
-      rawApiKeyReturned: false,
-      rawHeaderValuesReturned: false,
-      rawProbePayloadReturned: false,
-      rawQueryValuesReturned: false,
-      rawRequestBodiesReturned: false,
-      rawResponseBodiesReturned: false,
-    },
-    ...overrides,
-  };
-}
-
-const dataConnectorLiveRequiredChecks = [
-  "managed_connector_sync_exercised",
-  "worker_cni_egress_enforced",
-  "dns_private_address_denied",
-  "secret_ref_resolution_verified",
-  "worker_crash_retry_or_requeue_verified",
-  "sync_log_redaction",
-  "sanitized_readback_verified",
-] as const;
-
-function dataConnectorLiveEvidence(overrides: Record<string, unknown> = {}) {
-  return {
-    schemaVersion: "romeo.data-connector-live-evidence.v1",
-    status: "passed",
-    mode: "live",
-    deployment: "kubernetes",
-    generatedAt: "2026-01-01T00:00:00.000Z",
-    checks: [...dataConnectorLiveRequiredChecks],
-    connectors: {
-      managedConnectorTypeCount: 2,
-      syncAttemptCount: 3,
-      successfulSyncCount: 2,
-      failedSyncCount: 0,
-      secretRefConnectorCount: 1,
-      delegatedOAuthConnectorCount: 1,
-      deniedPrivateTargetCount: 1,
-    },
-    egress: {
-      workerCniOrNetworkPolicyEnforced: true,
-      allowlistRequired: true,
-      privateNetworkDenied: true,
-      dnsRebindingDenied: true,
-      deniedPrivateNetworkCount: 1,
-      allowedExternalHostCount: 1,
-    },
-    secrets: {
-      secretRefResolutionVerified: true,
-      secretResolverBoundaryVerified: true,
-      rawSecretValuesReturned: false,
-      tokenValuesReturned: false,
-    },
-    worker: {
-      workerExecutionVerified: true,
-      crashRetryOrRequeueVerified: true,
-      requeuedSyncCount: 1,
-      completedAfterRetry: true,
-    },
-    logRedaction: {
-      syncLogRedactionVerified: true,
-      podLogRedactionVerified: true,
-      podLogScanCount: 2,
-      workerLogScanCount: 2,
-      connectorContentSentinelHitCount: 0,
-      secretSentinelHitCount: 0,
-      tokenSentinelHitCount: 0,
-    },
-    readback: {
-      adminPostureReadbackVerified: true,
-      syncHistoryReadbackVerified: true,
-    },
-    redaction: {
-      rawAllowedHostsReturned: false,
-      rawConnectorConfigReturned: false,
-      rawConnectorContentReturned: false,
-      rawEndpointUrlsReturned: false,
-      rawEvidencePathsReturned: false,
-      rawLogLinesReturned: false,
-      rawSecretRefsReturned: false,
-      secretValuesReturned: false,
-      tokenValuesReturned: false,
-    },
-    ...overrides,
-  };
-}
-
 describe("Romeo API thin slice", () => {
   it("serves health and the Milestone 1 OpenAPI document", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository());
@@ -2476,8 +2263,6 @@ describe("Romeo API thin slice", () => {
     expect(
       spec.components.schemas.PostgresOperationalPostureReport,
     ).toBeDefined();
-    expect(Object.keys(spec.paths)).toContain("/admin/ga/evidence-posture");
-    expect(spec.components.schemas.GaEvidencePostureReport).toBeDefined();
     expect(Object.keys(spec.paths)).toContain("/admin/edge-security/posture");
     expect(spec.components.schemas.EdgeSecurityPostureReport).toBeDefined();
     expect(Object.keys(spec.paths)).toContain(
@@ -2486,8 +2271,6 @@ describe("Romeo API thin slice", () => {
     expect(
       spec.components.schemas.BrowserAutomationPostureReport,
     ).toBeDefined();
-    expect(Object.keys(spec.paths)).toContain("/admin/data-connectors/posture");
-    expect(spec.components.schemas.DataConnectorPostureReport).toBeDefined();
     expect(
       spec.paths["/agents/{agentId}"].get.responses[200].content[
         "application/json"
@@ -2652,20 +2435,6 @@ describe("Romeo API thin slice", () => {
       "/workspaces/{workspaceId}/export",
     );
     expect(spec.paths["/workspaces"].post).toBeDefined();
-    expect(Object.keys(spec.paths)).toContain("/data-connectors");
-    expect(Object.keys(spec.paths)).toContain("/delegated-oauth/providers");
-    expect(Object.keys(spec.paths)).toContain("/delegated-oauth/start");
-    expect(Object.keys(spec.paths)).toContain("/delegated-oauth/connections");
-    expect(Object.keys(spec.paths)).toContain(
-      "/delegated-oauth/connections/{connectionId}/revoke",
-    );
-    expect(Object.keys(spec.paths)).toContain("/delegated-oauth/callback");
-    expect(Object.keys(spec.paths)).toContain(
-      "/data-connectors/{connectorId}/sync",
-    );
-    expect(Object.keys(spec.paths)).toContain(
-      "/data-connectors/{connectorId}/syncs",
-    );
     expect(Object.keys(spec.paths)).toContain("/agents/{agentId}/tools");
     expect(Object.keys(spec.paths)).toContain(
       "/agents/{agentId}/tools/{toolId}",
@@ -2887,12 +2656,6 @@ describe("Romeo API thin slice", () => {
     );
     expect(spec.components.schemas.DataRightsCoverageReport).toBeDefined();
     expect(
-      spec.components.schemas.DataRightsRetentionEvidenceSummary,
-    ).toBeDefined();
-    expect(spec.components.schemas.DataRightsCoverageReport.required).toContain(
-      "retentionEvidence",
-    );
-    expect(
       spec.paths["/governance/data-rights/coverage"].get.responses[200].content[
         "application/json"
       ].schema.properties.data.$ref,
@@ -3109,11 +2872,6 @@ describe("Romeo API thin slice", () => {
         .content["application/json"].schema.properties.data.$ref,
     ).toBe("#/components/schemas/BrowserAutomationPostureReport");
     expect(
-      spec.paths["/admin/data-connectors/posture"].get.responses[200].content[
-        "application/json"
-      ].schema.properties.data.$ref,
-    ).toBe("#/components/schemas/DataConnectorPostureReport");
-    expect(
       spec.paths["/browser-automation-tasks/claim"].post.responses[200].content[
         "application/json"
       ].schema.properties.data.$ref,
@@ -3191,37 +2949,6 @@ describe("Romeo API thin slice", () => {
     expect(spec.components.schemas.ScimGroup).toBeDefined();
     expect(spec.components.schemas.ScimPatchOp).toBeDefined();
     expect(Object.keys(spec.paths)).toContain("/docs");
-    expect(spec.components.schemas.OpenWebUiConfigResponse).toBeUndefined();
-  });
-
-  it("exposes the OpenWebUI-shaped reference bridge only when explicitly enabled", async () => {
-    const disabledApi = createRomeoApi(new InMemoryRomeoRepository());
-    const disabledSpec = await (
-      await disabledApi.request("/api/v1/openapi.json")
-    ).json();
-    const disabledBoot = await disabledApi.request("/api/v1/openwebui/config");
-
-    const enabledApi = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: openWebUiBridgeEnv(),
-    });
-    const enabledSpec = await (
-      await enabledApi.request("/api/v1/openapi.json")
-    ).json();
-    const enabledBoot = await enabledApi.request("/api/v1/openwebui/config");
-
-    expect(disabledSpec.paths["/openwebui/config"]).toBeUndefined();
-    expect(disabledSpec.paths["/channels/"]).toBeUndefined();
-    expect(
-      disabledSpec.components.schemas.OpenWebUiChannelMessageResponse,
-    ).toBeUndefined();
-    expect(disabledBoot.status).toBe(404);
-    expect(enabledSpec.paths["/openwebui/config"]).toBeDefined();
-    expect(enabledSpec.paths["/auths/"]).toBeDefined();
-    expect(enabledSpec.paths["/channels/"]).toBeDefined();
-    expect(
-      enabledSpec.components.schemas.OpenWebUiChannelMessageResponse,
-    ).toBeDefined();
-    expect(enabledBoot.status).toBe(200);
   });
 
   it("renders self-contained OpenAPI docs HTML", async () => {
@@ -3238,102 +2965,20 @@ describe("Romeo API thin slice", () => {
   });
 
   it("reports sanitized edge security posture and applies security headers", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "romeo-edge-posture-"));
-    const evidencePath = join(directory, "live-edge-enforcement.json");
-    writeFileSync(
-      evidencePath,
-      JSON.stringify({
-        schemaVersion: "romeo.live-edge-enforcement.v1",
-        generatedAt: "2026-07-02T03:00:00.000Z",
-        status: "passed",
-        mode: "live",
-        target: {
-          deployment: "edge",
-          origin: "https://edge.internal.example",
-          rawUrl: "https://edge.internal.example/api?token=RAW_EDGE_TOKEN",
-        },
-        checks: [
-          "security_headers_present",
-          "hsts_header_present",
-          "admin_edge_posture_readback",
-          "waf_or_gateway_probe_blocked",
-          "oversized_request_rejected",
-          "public_rate_limit_enforced",
-          "raw_probe_payload_not_retained",
-        ],
-        securityHeaders: {
-          status: "passed",
-          path: { pathname: "/api/v1/health", queryParameterCount: 0 },
-          httpStatus: 200,
-          matched: [
-            "x-content-type-options",
-            "x-frame-options",
-            "referrer-policy",
-            "cross-origin-opener-policy",
-            "permissions-policy",
-            "strict-transport-security",
-          ],
-          missing: [],
-          rawHeaderValue: "RAW_EDGE_HEADER_VALUE",
-          headerValuesReturned: false,
-        },
-        adminPosture: {
-          checked: true,
-          status: "passed",
-          reportStatus: "ready",
-          wafMode: "block",
-          rawApiKey: "RAW_EDGE_API_KEY",
-        },
-        waf: {
-          status: "passed",
-          method: "GET",
-          path: { pathname: "/api/v1/health", queryParameterCount: 1 },
-          pathSha256:
-            "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
-          httpStatus: 403,
-          expectedStatuses: [403, 406, 429],
-          expectedHeaderPresent: true,
-          rawProbePayload: "RAW_EDGE_PROBE_PAYLOAD",
-          responseBodyReturned: false,
-        },
-        requestBodyLimit: {
-          status: "passed",
-          method: "POST",
-          path: {
-            pathname: "/api/v1/billing/webhooks/generic",
-            queryParameterCount: 0,
-          },
-          bytesSent: 1048576,
-          httpStatus: 413,
-          expectedStatuses: [413],
-          rawRequestBody: "RAW_EDGE_REQUEST_BODY",
-          requestBodyReturned: false,
-          responseBodyReturned: false,
-        },
-        rateLimit: {
-          status: "passed",
-          method: "GET",
-          path: { pathname: "/api/v1/health", queryParameterCount: 1 },
-          attempts: 8,
-          blockedAt: 8,
-          expectedStatus: 429,
-          statuses: [200, 200, 200, 200, 200, 200, 200, 429],
-          rawQueryValue: "RAW_EDGE_QUERY_VALUE",
-          responseBodyReturned: false,
-        },
-        redaction: {
-          rawApiKeyReturned: false,
-          rawHeaderValuesReturned: false,
-          rawProbePayloadReturned: false,
-          rawQueryValuesReturned: false,
-          rawRequestBodiesReturned: false,
-          rawResponseBodiesReturned: false,
-        },
-      }),
-      "utf8",
-    );
-    const api = createRomeoApi(new InMemoryRomeoRepository(), {
+    // The seeded admin is confined to loopback origins, so the HTTPS
+    // deployment under test is reached with an admin API key minted locally.
+    const repository = new InMemoryRomeoRepository();
+    const keyResponse = await createRomeoApi(repository, {
+      env: testEnv(),
+    }).request("/api/v1/api-keys", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Edge posture", scopes: ["admin:read"] }),
+    });
+    const adminKey = (await keyResponse.json()).data.token as string;
+    const api = createRomeoApi(repository, {
       env: testEnv({
+        DEV_SEEDED_LOGIN: "false",
         APP_ORIGIN: "https://romeo.example.com",
         EDGE_TLS_TERMINATION: "ingress",
         EDGE_TRUSTED_PROXY_MODE: "trusted_proxy",
@@ -3359,11 +3004,12 @@ describe("Romeo API thin slice", () => {
         HTTP_RATE_LIMIT_PUBLIC_MAX: "250",
         HTTP_RATE_LIMIT_AUTHENTICATED_MAX: "5000",
         HTTP_RATE_LIMIT_WEBHOOK_MAX: "750",
-        EDGE_ENFORCEMENT_EVIDENCE_PATH: evidencePath,
       }),
     });
 
-    const response = await api.request("/api/v1/admin/edge-security/posture");
+    const response = await api.request("/api/v1/admin/edge-security/posture", {
+      headers: { authorization: `Bearer ${adminKey}` },
+    });
     const body = await response.json();
     const serialized = JSON.stringify(body);
 
@@ -3383,10 +3029,6 @@ describe("Romeo API thin slice", () => {
     expect(body.data.proxy.forwardedHeadersTrusted).toBe(true);
     expect(body.data.ingress.allowedOriginRuleCount).toBe(2);
     expect(body.data.ingress.desiredWafMode).toBe("block");
-    expect(body.data.ingress.observedWafEnforcement).toBe("block");
-    expect(body.data.ingress.observedWafAt).toBe(
-      body.data.liveEvidence.generatedAt,
-    );
     expect(body.data.ingress.wafMode).toBe("block");
     expect(body.data.limits.requestBodyMaxBytes).toBe(75000000);
     expect(body.data.limits.files).toEqual({
@@ -3413,152 +3055,9 @@ describe("Romeo API thin slice", () => {
     expect(body.data.checks.map((check: { id: string }) => check.id)).toContain(
       "file_size_limits",
     );
-    expect(body.data.checks.map((check: { id: string }) => check.id)).toContain(
-      "live_edge_enforcement_evidence",
-    );
-    expect(body.data.liveEvidence.status).toBe("satisfied");
-    expect(body.data.liveEvidence.target).toEqual({
-      deployment: "edge",
-      originConfigured: true,
-    });
-    expect(body.data.liveEvidence.checks).toMatchObject({
-      requiredTotal: 5,
-      requiredPresent: 5,
-      missingRequired: [],
-    });
-    expect(body.data.liveEvidence.securityHeaders).toMatchObject({
-      checked: true,
-      status: "passed",
-      matchedRequiredCount: 5,
-      missingRequiredCount: 0,
-      missingRequired: [],
-      hstsChecked: true,
-      headerValuesReturned: false,
-    });
-    expect(body.data.liveEvidence.waf).toMatchObject({
-      checked: true,
-      status: "passed",
-      httpStatus: 403,
-      expectedStatusCount: 3,
-      expectedHeaderPresent: true,
-      responseBodyReturned: false,
-    });
-    expect(body.data.liveEvidence.requestBodyLimit).toMatchObject({
-      checked: true,
-      status: "passed",
-      bytesSent: 1048576,
-      httpStatus: 413,
-      expectedStatusCount: 1,
-      requestBodyReturned: false,
-      responseBodyReturned: false,
-    });
-    expect(body.data.liveEvidence.rateLimit).toMatchObject({
-      checked: true,
-      status: "passed",
-      attempts: 8,
-      blockedAt: 8,
-      expectedStatus: 429,
-      expectedStatusObserved: true,
-      responseBodyReturned: false,
-    });
     expect(body.data.redaction.rawAllowedOriginsReturned).toBe(false);
-    expect(body.data.redaction.rawEvidencePathReturned).toBe(false);
-    expect(body.data.redaction.evidenceFileBodyReturned).toBe(false);
-    expect(serialized).not.toContain(evidencePath);
-    expect(serialized).not.toContain(directory);
     expect(serialized).not.toContain("romeo.example.com");
     expect(serialized).not.toContain("admin.example.com");
-    expect(serialized).not.toContain("edge.internal.example");
-    expect(serialized).not.toContain("RAW_EDGE_TOKEN");
-    expect(serialized).not.toContain("RAW_EDGE_HEADER_VALUE");
-    expect(serialized).not.toContain("RAW_EDGE_API_KEY");
-    expect(serialized).not.toContain("RAW_EDGE_PROBE_PAYLOAD");
-    expect(serialized).not.toContain("RAW_EDGE_REQUEST_BODY");
-    expect(serialized).not.toContain("RAW_EDGE_QUERY_VALUE");
-  });
-
-  it("reports GA-aligned edge enforcement failure codes", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "romeo-edge-posture-bad-"));
-    const baseEvidence = liveEdgeEvidence();
-    const cases = [
-      {
-        evidence: liveEdgeEvidence({
-          checks: liveEdgeRequiredChecks.filter(
-            (check) => check !== "waf_or_gateway_probe_blocked",
-          ),
-        }),
-        failureCode:
-          "edge_enforcement_missing_check:waf_or_gateway_probe_blocked",
-      },
-      {
-        evidence: liveEdgeEvidence({
-          securityHeaders: {
-            ...(baseEvidence.securityHeaders as Record<string, unknown>),
-            matched: liveEdgeRequiredHeaders.filter(
-              (header) => header !== "x-frame-options",
-            ),
-          },
-        }),
-        failureCode: "edge_header_not_matched:x-frame-options",
-      },
-      {
-        evidence: liveEdgeEvidence({
-          rateLimit: {
-            ...(baseEvidence.rateLimit as Record<string, unknown>),
-            statuses: [200, 200, 200],
-          },
-        }),
-        failureCode: "edge_rate_limit_expected_status_missing",
-      },
-      {
-        evidence: liveEdgeEvidence({
-          requestBodyLimit: {
-            ...(baseEvidence.requestBodyLimit as Record<string, unknown>),
-            requestBodyReturned: true,
-          },
-        }),
-        failureCode: "edge_redaction_missing_body_limit_request_body",
-      },
-    ];
-
-    for (const [index, testCase] of cases.entries()) {
-      const evidencePath = join(directory, `live-edge-${index}.json`);
-      writeFileSync(evidencePath, JSON.stringify(testCase.evidence), "utf8");
-      const api = createRomeoApi(new InMemoryRomeoRepository(), {
-        env: testEnv({
-          APP_ORIGIN: "https://romeo.example.com",
-          EDGE_TLS_TERMINATION: "ingress",
-          EDGE_TRUSTED_PROXY_MODE: "trusted_proxy",
-          EDGE_WAF_MODE: "block",
-          EDGE_ALLOWED_ORIGINS: "https://romeo.example.com",
-          EDGE_HSTS_ENABLED: "true",
-          // These tests assert edge enforcement failure codes, not rate
-          // limiting. The valkey driver made them depend on a live server on
-          // localhost:6379 and 503 in CI. The fail-closed valkey path has its
-          // own test below ("fails closed when the valkey rate limiter is
-          // unavailable").
-          HTTP_RATE_LIMIT_DRIVER: "memory",
-          EDGE_ENFORCEMENT_EVIDENCE_PATH: evidencePath,
-        }),
-      });
-
-      const response = await api.request("/api/v1/admin/edge-security/posture");
-      const body = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(body.data.status).toBe("attention_required");
-      expect(body.data.liveEvidence.status).toBe("failed");
-      expect(body.data.ingress.desiredWafMode).toBe("block");
-      expect(body.data.ingress.observedWafEnforcement).toBe(
-        testCase.failureCode.includes("waf") ? "failed" : "block",
-      );
-      expect(body.data.ingress.observedWafAt).toBe(
-        body.data.liveEvidence.generatedAt,
-      );
-      expect(body.data.liveEvidence.failureCodes).toContain(
-        testCase.failureCode,
-      );
-    }
   });
 
   it("fails closed with 503 when the valkey rate limiter is unavailable", async () => {
@@ -3584,23 +3083,11 @@ describe("Romeo API thin slice", () => {
     expect(body.error?.code).toBe("rate_limit_unavailable");
   });
 
-  it("reports browser automation posture without leaking runner or evidence details", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "romeo-browser-posture-"));
-    const evidencePath = join(directory, "live-browser-evidence.json");
+  it("reports browser automation posture without leaking runner details", async () => {
     const rawRunnerUrl = "https://runner.internal.example/tasks";
     const rawTaskSentinel = "RAW_BROWSER_AUTOMATION_POSTURE_TASK";
-    writeFileSync(
-      evidencePath,
-      JSON.stringify(
-        browserAutomationLiveEvidence({
-          runnerUrl: rawRunnerUrl,
-          rawTaskText: rawTaskSentinel,
-        }),
-      ),
-    );
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
       env: testEnv({
-        BROWSER_AUTOMATION_LIVE_EVIDENCE_PATH: evidencePath,
         BROWSER_AUTOMATION_NETWORK_POLICY_ENABLED: "true",
         BROWSER_AUTOMATION_RUNNER_URL: rawRunnerUrl,
         BROWSER_AUTOMATION_WORKER_ENABLED: "true",
@@ -3618,7 +3105,6 @@ describe("Romeo API thin slice", () => {
       schema: "romeo.browser-automation-posture.v1",
       status: "ready",
       deployment: {
-        liveEvidencePathConfigured: true,
         networkPolicyConfigured: true,
         runnerOriginConfigured: true,
         runnerUrlConfigured: true,
@@ -3630,17 +3116,8 @@ describe("Romeo API thin slice", () => {
         requiredWorkerScope: "tools:manage",
         workerQueue: "browser_automation",
       },
-      liveEvidence: {
-        configured: true,
-        status: "satisfied",
-        evidenceStatus: "passed",
-        mode: "live",
-        deployment: "kubernetes",
-      },
       redaction: {
-        evidenceFileBodiesReturned: false,
         rawArtifactStorageKeysReturned: false,
-        rawEvidencePathsReturned: false,
         rawRunnerUrlReturned: false,
         rawTaskTextReturned: false,
         secretValuesReturned: false,
@@ -3649,232 +3126,8 @@ describe("Romeo API thin slice", () => {
     });
     expect(body.data.queue.total).toBe(0);
     expect(body.data.artifacts.registeredCount).toBe(0);
-    expect(serialized).not.toContain(evidencePath);
     expect(serialized).not.toContain("runner.internal.example");
     expect(serialized).not.toContain(rawTaskSentinel);
-  });
-
-  it("rejects browser automation live posture evidence that fails GA-aligned runner proofs", async () => {
-    const directory = mkdtempSync(
-      join(tmpdir(), "romeo-browser-posture-negative-"),
-    );
-    const baseEvidence = browserAutomationLiveEvidence();
-    const cases = [
-      {
-        name: "deployment",
-        evidence: browserAutomationLiveEvidence({ deployment: "compose" }),
-        failureCode: "browser_automation_live_deployment_invalid",
-      },
-      {
-        name: "sandbox",
-        evidence: browserAutomationLiveEvidence({
-          runnerSandbox: {
-            ...baseEvidence.runnerSandbox,
-            targetOriginOnly: false,
-          },
-        }),
-        failureCode: "browser_automation_live_runner_sandbox_invalid",
-      },
-      {
-        name: "network",
-        evidence: browserAutomationLiveEvidence({
-          networkDenial: {
-            ...baseEvidence.networkDenial,
-            cniOrNetworkPolicyDenied: false,
-          },
-        }),
-        failureCode: "browser_automation_live_network_denial_invalid",
-      },
-      {
-        name: "retention",
-        evidence: browserAutomationLiveEvidence({
-          retention: {
-            ...baseEvidence.retention,
-            deletedArtifactCount: 0,
-          },
-        }),
-        failureCode: "browser_automation_live_retention_invalid",
-      },
-    ];
-
-    for (const item of cases) {
-      const evidencePath = join(directory, `${item.name}.json`);
-      writeFileSync(evidencePath, JSON.stringify(item.evidence));
-      const api = createRomeoApi(new InMemoryRomeoRepository(), {
-        env: testEnv({
-          BROWSER_AUTOMATION_LIVE_EVIDENCE_PATH: evidencePath,
-          BROWSER_AUTOMATION_NETWORK_POLICY_ENABLED: "true",
-          BROWSER_AUTOMATION_RUNNER_URL:
-            "https://runner.internal.example/tasks",
-          BROWSER_AUTOMATION_WORKER_ENABLED: "true",
-        }),
-      });
-
-      const response = await api.request(
-        "/api/v1/admin/browser-automation/posture",
-      );
-      const body = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(body.data.status).toBe("attention_required");
-      expect(body.data.liveEvidence.status).toBe("failed");
-      expect(body.data.liveEvidence.failureCodes).toContain(item.failureCode);
-      expect(body.data.warnings).toContain(
-        "browser_automation_live_evidence_invalid",
-      );
-    }
-  });
-
-  it("reports data connector live posture without leaking connector evidence details", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "romeo-connector-posture-"));
-    const evidencePath = join(directory, "data-connector-live-evidence.json");
-    const rawEndpoint = "https://confluence.secret.example/wiki";
-    const rawSecretRef = "vault://romeo/connectors/confluence";
-    const rawConnectorContent = "RAW_CONNECTOR_CONTENT_SENTINEL";
-    writeFileSync(
-      evidencePath,
-      JSON.stringify(
-        dataConnectorLiveEvidence({
-          egress: {
-            ...dataConnectorLiveEvidence().egress,
-            approvedEndpointUrl: rawEndpoint,
-          },
-          secrets: {
-            ...dataConnectorLiveEvidence().secrets,
-            secretRef: rawSecretRef,
-          },
-          rawConnectorContent,
-        }),
-      ),
-    );
-    const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: testEnv({
-        DATA_CONNECTOR_EXECUTION_DRIVER: "managed-fetch",
-        DATA_CONNECTOR_EGRESS_POLICY: "require_allowlist",
-        DATA_CONNECTOR_FETCH_ALLOWED_HOSTS: "confluence.secret.example",
-        DATA_CONNECTOR_LIVE_EVIDENCE_PATH: evidencePath,
-        DATA_CONNECTOR_NETWORK_POLICY_ENABLED: "true",
-        DATA_CONNECTOR_WORKER_ENABLED: "true",
-        SECRET_RESOLVER_DRIVER: "env",
-        MANAGED_SECRET_ENCRYPTION_KEY: "managed-secret-key-32-bytes-min",
-      }),
-    });
-
-    const response = await api.request("/api/v1/admin/data-connectors/posture");
-    const body = await response.json();
-    const serialized = JSON.stringify(body);
-
-    expect(response.status).toBe(200);
-    expect(body.data).toMatchObject({
-      schema: "romeo.data-connector-posture.v1",
-      status: "ready",
-      runtime: {
-        executionDriver: "managed-fetch",
-        egressPolicy: "require_allowlist",
-        managedFetchEnabled: true,
-        allowedHostRuleCount: 1,
-      },
-      deployment: {
-        liveEvidencePathConfigured: true,
-        networkPolicyConfigured: true,
-        workerEnabled: true,
-      },
-      liveEvidence: {
-        configured: true,
-        status: "satisfied",
-        evidenceStatus: "passed",
-        mode: "live",
-        deployment: "kubernetes",
-        summary: {
-          managedConnectorTypeCount: 2,
-          secretRefConnectorCount: 1,
-          syncAttemptCount: 3,
-        },
-      },
-      redaction: {
-        evidenceFileBodiesReturned: false,
-        rawAllowedHostsReturned: false,
-        rawConnectorConfigReturned: false,
-        rawConnectorContentReturned: false,
-        rawEndpointUrlsReturned: false,
-        rawEvidencePathsReturned: false,
-        rawSecretRefsReturned: false,
-        secretValuesReturned: false,
-        tokenValuesReturned: false,
-      },
-      warnings: [],
-    });
-    expect(body.data.connectors.total).toBe(0);
-    expect(body.data.syncs.total).toBe(0);
-    expect(serialized).not.toContain(evidencePath);
-    expect(serialized).not.toContain("confluence.secret.example");
-    expect(serialized).not.toContain(rawEndpoint);
-    expect(serialized).not.toContain(rawSecretRef);
-    expect(serialized).not.toContain(rawConnectorContent);
-  });
-
-  it("rejects data connector live posture evidence that fails GA-aligned worker-boundary proofs", async () => {
-    const directory = mkdtempSync(
-      join(tmpdir(), "romeo-connector-posture-negative-"),
-    );
-    const baseEvidence = dataConnectorLiveEvidence();
-    const cases = [
-      {
-        name: "deployment",
-        evidence: dataConnectorLiveEvidence({ deployment: "compose" }),
-        failureCode: "data_connector_live_deployment_invalid",
-      },
-      {
-        name: "egress",
-        evidence: dataConnectorLiveEvidence({
-          egress: {
-            ...baseEvidence.egress,
-            workerCniOrNetworkPolicyEnforced: false,
-          },
-        }),
-        failureCode: "data_connector_live_egress_invalid",
-      },
-      {
-        name: "readback",
-        evidence: dataConnectorLiveEvidence({
-          readback: {
-            ...baseEvidence.readback,
-            adminPostureReadbackVerified: false,
-          },
-        }),
-        failureCode: "data_connector_live_readback_invalid",
-      },
-    ];
-
-    for (const item of cases) {
-      const evidencePath = join(directory, `${item.name}.json`);
-      writeFileSync(evidencePath, JSON.stringify(item.evidence));
-      const api = createRomeoApi(new InMemoryRomeoRepository(), {
-        env: testEnv({
-          DATA_CONNECTOR_EXECUTION_DRIVER: "managed-fetch",
-          DATA_CONNECTOR_EGRESS_POLICY: "require_allowlist",
-          DATA_CONNECTOR_FETCH_ALLOWED_HOSTS: "confluence.secret.example",
-          DATA_CONNECTOR_LIVE_EVIDENCE_PATH: evidencePath,
-          DATA_CONNECTOR_NETWORK_POLICY_ENABLED: "true",
-          DATA_CONNECTOR_WORKER_ENABLED: "true",
-          SECRET_RESOLVER_DRIVER: "env",
-          MANAGED_SECRET_ENCRYPTION_KEY: "managed-secret-key-32-bytes-min",
-        }),
-      });
-
-      const response = await api.request(
-        "/api/v1/admin/data-connectors/posture",
-      );
-      const body = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(body.data.status).toBe("attention_required");
-      expect(body.data.liveEvidence.status).toBe("failed");
-      expect(body.data.liveEvidence.failureCodes).toContain(item.failureCode);
-      expect(body.data.warnings).toContain(
-        "data_connector_live_evidence_invalid",
-      );
-    }
   });
 
   it("does not report browser automation ready for a non-HTTPS runner URL", async () => {
@@ -3942,1022 +3195,14 @@ describe("Romeo API thin slice", () => {
         usernameReturned: false,
       },
     });
-    expect(body.data.queryPlanReview.reviewedPathCount).toBe(19);
-    expect(body.data.queryPlanReview.requiredIndexCount).toBe(20);
-    expect(body.data.queryPlanReview.categories).toContain("retrieval");
-    expect(body.data.queryPlanReview.categories).toContain("billing");
-    expect(body.data.warnings).toContain(
-      "representative_query_plan_evidence_required",
-    );
-    expect(body.data.warnings).toContain("live_lock_telemetry_required");
-    expect(body.data.warnings).toContain(
+    expect(body.data.warnings).toEqual([
       "postgres_connection_security_warning",
-    );
+    ]);
     expect(body.data.redaction.databaseUrlReturned).toBe(false);
-    expect(body.data.redaction.evidenceFileBodiesReturned).toBe(false);
     expect(body.data.redaction.rawSqlReturned).toBe(false);
-    expect(body.data.redaction.rawEvidencePathsReturned).toBe(false);
     expect(serialized).not.toContain("super-secret");
     expect(serialized).not.toContain("db.internal");
     expect(serialized).not.toContain("postgres://");
-  });
-
-  it("reports configured Postgres operational evidence without leaking evidence details", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "romeo-postgres-posture-"));
-    const queryPlanPath = join(directory, "query-plan.json");
-    const slowQueryPath = join(directory, "slow-query.json");
-    const lockPath = join(directory, "locks.json");
-    const archivalPath = join(directory, "archival.json");
-    writeFileSync(
-      queryPlanPath,
-      JSON.stringify({
-        schemaVersion: "romeo.postgres-query-plan-review.v1",
-        generatedAt: "2026-07-02T00:00:00.000Z",
-        database: "postgres://romeo:super-secret@db.internal/romeo",
-        status: "passed",
-        target: {
-          representativeVolume: true,
-          deploymentTier: "enterprise",
-          postgresMode: "external-hosted-postgres",
-        },
-        missingExpectedIndexes: [],
-        checks: [
-          {
-            id: "messages_chat_ordered",
-            status: "passed",
-            rawSql: "SELECT * FROM raw_sql_sentinel",
-          },
-        ],
-      }),
-      "utf8",
-    );
-    writeFileSync(
-      slowQueryPath,
-      JSON.stringify({
-        schemaVersion: "romeo.postgres-slow-query-telemetry.v1",
-        generatedAt: "2026-07-02T00:00:00.000Z",
-        status: "passed",
-        summary: {
-          windowMinutes: 60,
-          fingerprintCount: 12,
-          slowQueryCount: 0,
-          totalCalls: 1000,
-          maxMeanMs: 42,
-          maxP95Ms: 42,
-          maxP99Ms: 80,
-          tempFileStatementCount: 1,
-        },
-        samples: [{ rawSql: "raw_slow_sql_sentinel" }],
-      }),
-      "utf8",
-    );
-    writeFileSync(
-      lockPath,
-      JSON.stringify({
-        schemaVersion: "romeo.postgres-lock-telemetry.v1",
-        generatedAt: "2026-07-02T00:00:00.000Z",
-        status: "passed",
-        summary: {
-          windowMinutes: 60,
-          blockedSessionMax: 0,
-          longestWaitMs: 0,
-          deadlockCount: 0,
-        },
-        samples: [{ lockStatement: "raw_lock_statement_sentinel" }],
-      }),
-      "utf8",
-    );
-    writeFileSync(
-      archivalPath,
-      JSON.stringify({
-        schemaVersion: "romeo.postgres-archival-partitioning-decision.v1",
-        generatedAt: "2026-07-02T00:00:00.000Z",
-        status: "accepted",
-        decision: "no_runtime_partitioning_enabled",
-        migrationRequired: false,
-        tables: ["messages", "run_events", "audit_logs"],
-        rationale: "raw_archival_rationale_sentinel",
-      }),
-      "utf8",
-    );
-    const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: testEnv({
-        POSTGRES_QUERY_PLAN_EVIDENCE_PATH: queryPlanPath,
-        POSTGRES_SLOW_QUERY_TELEMETRY_EVIDENCE_PATH: slowQueryPath,
-        POSTGRES_LOCK_TELEMETRY_EVIDENCE_PATH: lockPath,
-        POSTGRES_ARCHIVAL_PARTITIONING_DECISION_PATH: archivalPath,
-      }),
-    });
-
-    const response = await api.request(
-      "/api/v1/admin/postgres/operational-posture",
-    );
-    const body = await response.json();
-    const serialized = JSON.stringify(body);
-
-    expect(response.status).toBe(200);
-    expect(body.data.status).toBe("ready");
-    expect(body.data.warnings).toEqual([]);
-    expect(body.data.connectionSecurity.hostCategory).toBe("local");
-    expect(body.data.connectionSecurity.warningCodes).toEqual([]);
-    expect(body.data.queryPlanReview.representativeVolumeEvidence.status).toBe(
-      "satisfied",
-    );
-    expect(
-      body.data.queryPlanReview.representativeVolumeEvidence
-        .representativeVolume,
-    ).toBe(true);
-    expect(body.data.slowQueryTelemetry.status).toBe("satisfied");
-    expect(body.data.slowQueryTelemetry.evidence.fingerprintCount).toBe(12);
-    expect(body.data.slowQueryTelemetry.evidence.totalCalls).toBe(1000);
-    expect(body.data.slowQueryTelemetry.evidence.maxMeanMs).toBe(42);
-    expect(body.data.slowQueryTelemetry.evidence.tempFileStatementCount).toBe(
-      1,
-    );
-    expect(body.data.lockTelemetry.status).toBe("satisfied");
-    expect(body.data.lockTelemetry.evidence.deadlockCount).toBe(0);
-    expect(body.data.archivalPartitioning.status).toBe("accepted");
-    expect(body.data.archivalPartitioning.evidence.tableCount).toBe(3);
-    expect(serialized).not.toContain(directory);
-    expect(serialized).not.toContain(queryPlanPath);
-    expect(serialized).not.toContain("super-secret");
-    expect(serialized).not.toContain("db.internal");
-    expect(serialized).not.toContain("raw_sql_sentinel");
-    expect(serialized).not.toContain("raw_slow_sql_sentinel");
-    expect(serialized).not.toContain("raw_lock_statement_sentinel");
-    expect(serialized).not.toContain("raw_archival_rationale_sentinel");
-  });
-
-  it("collapses Postgres operational evidence failures to stable codes", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "romeo-postgres-failures-"));
-    const slowQueryPath = join(directory, "slow-query.json");
-    const lockPath = join(directory, "locks.json");
-    const archivalPath = join(directory, "archival.json");
-    writeFileSync(
-      slowQueryPath,
-      JSON.stringify({
-        schemaVersion: "romeo.postgres-slow-query-telemetry.v1",
-        generatedAt: "2026-07-02T00:00:00.000Z",
-        status: "passed",
-        summary: {
-          fingerprintCount: 1,
-          slowQueryCount: 0,
-          totalCalls: 10,
-          tempFileStatementCount: 0,
-        },
-        failures: ["raw_customer_slow_query_failure"],
-      }),
-      "utf8",
-    );
-    writeFileSync(
-      lockPath,
-      JSON.stringify({
-        schemaVersion: "romeo.postgres-lock-telemetry.v1",
-        generatedAt: "2026-07-02T00:00:00.000Z",
-        status: "passed",
-        summary: {
-          blockedSessionMax: 0,
-          deadlockCount: 0,
-        },
-        failures: ["raw_customer_lock_failure"],
-      }),
-      "utf8",
-    );
-    writeFileSync(
-      archivalPath,
-      JSON.stringify({
-        schemaVersion: "romeo.postgres-archival-partitioning-decision.v1",
-        generatedAt: "2026-07-02T00:00:00.000Z",
-        status: "accepted",
-        decision: "no_runtime_partitioning_enabled",
-        tables: ["messages"],
-        failures: ["raw_customer_archival_failure"],
-      }),
-      "utf8",
-    );
-    const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: testEnv({
-        POSTGRES_SLOW_QUERY_TELEMETRY_EVIDENCE_PATH: slowQueryPath,
-        POSTGRES_LOCK_TELEMETRY_EVIDENCE_PATH: lockPath,
-        POSTGRES_ARCHIVAL_PARTITIONING_DECISION_PATH: archivalPath,
-      }),
-    });
-
-    const response = await api.request(
-      "/api/v1/admin/postgres/operational-posture",
-    );
-    const body = await response.json();
-    const serialized = JSON.stringify(body);
-
-    expect(response.status).toBe(200);
-    expect(body.data.status).toBe("attention_required");
-    expect(body.data.slowQueryTelemetry.status).toBe("external_required");
-    expect(body.data.slowQueryTelemetry.evidence.failureCodes).toEqual([
-      "postgres_slow_query_failures_present",
-    ]);
-    expect(body.data.lockTelemetry.status).toBe("external_required");
-    expect(body.data.lockTelemetry.evidence.failureCodes).toEqual([
-      "postgres_lock_telemetry_failures_present",
-    ]);
-    expect(body.data.archivalPartitioning.status).toBe("decision_required");
-    expect(body.data.archivalPartitioning.evidence.failureCodes).toEqual([
-      "postgres_archival_decision_failures_present",
-    ]);
-    expect(body.data.warnings).toEqual(
-      expect.arrayContaining([
-        "postgres_slow_query_failures_present",
-        "postgres_lock_telemetry_failures_present",
-        "postgres_archival_decision_failures_present",
-      ]),
-    );
-    expect(serialized).not.toContain("raw_customer_slow_query_failure");
-    expect(serialized).not.toContain("raw_customer_lock_failure");
-    expect(serialized).not.toContain("raw_customer_archival_failure");
-  });
-
-  it("reports sanitized GA evidence posture without exposing checklist file details", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "romeo-ga-evidence-"));
-    const checklistPath = join(directory, "ga-checklist.json");
-    const preflightPath = join(directory, "ga-target-preflight.json");
-    const planPath = join(directory, "ga-target-plan.json");
-    const executionPath = join(directory, "ga-target-execution.json");
-    const bundlePath = join(directory, "ga-evidence-bundle.json");
-    writeFileSync(
-      checklistPath,
-      JSON.stringify({
-        schemaVersion: "romeo.ga-checklist.v1",
-        generatedAt: "2026-07-02T00:00:00.000Z",
-        status: "blocked",
-        strict: false,
-        target: {
-          profile: "full-product-enterprise",
-          fullProductEnterpriseRequired: true,
-          deploymentTiers: ["compose", "kubernetes"],
-          postgresModes: ["cloudnativepg", "external-hosted-postgres"],
-          qdrantLiveRequired: true,
-          qdrantDrRequired: false,
-          ciGovernanceLiveRequired: false,
-          kedaRequired: false,
-          browserAutomationRequired: false,
-          identityLiveRequired: false,
-          dataConnectorLiveRequired: false,
-          toolDispatchLiveRequired: false,
-          voiceProviderLiveRequired: true,
-          notificationAdapterLiveRequired: true,
-          analyticsAuthzLiveRequired: false,
-          targetQualityVectorComparisonRequired: false,
-          dataRightsRetentionLiveRequired: false,
-          billingOperationsLiveRequired: false,
-          auditIntegrityLiveRequired: false,
-          tenantPurgeLiveRequired: false,
-          supportBundleLiveRequired: false,
-          targetResilienceDrillsRequired: false,
-          postgresOperationsLiveRequired: false,
-        },
-        summary: {
-          total: 2,
-          satisfied: 1,
-          excepted: 0,
-          blocked: 1,
-          environmentRequired: 1,
-          securityCriticalBlocked: 1,
-        },
-        gates: [
-          {
-            id: "phase21.kubernetes_networkpolicy_enforcement",
-            phase: "21",
-            title: "Kubernetes NetworkPolicy CNI enforcement",
-            status: "blocked",
-            requiredForGa: true,
-            exceptionAllowed: false,
-            environmentRequired: true,
-            securityCritical: true,
-            evidence: [
-              {
-                path: "/tmp/raw-secret-path/kubernetes-networkpolicy.json",
-                status: "missing",
-                failures: ["raw_customer_ga_evidence_failure"],
-              },
-            ],
-            exception: {
-              gateId: "phase21.kubernetes_networkpolicy_enforcement",
-              status: "invalid",
-              owner: "owner@example.com",
-              approvedBy: "approver@example.com",
-              expiresAt: "2026-12-31T23:59:59.000Z",
-              rationale: "RAW_EXCEPTION_RATIONALE_SENTINEL",
-              riskAcceptance: "RAW_EXCEPTION_RISK_SENTINEL",
-              failures: [
-                "gate_not_exception_allowed",
-                "raw_customer_ga_exception_failure",
-              ],
-            },
-          },
-          {
-            id: "phase20.compose_product_smoke",
-            phase: "20",
-            title: "Compose product workflow smoke",
-            status: "satisfied",
-            requiredForGa: true,
-            exceptionAllowed: false,
-            environmentRequired: false,
-            securityCritical: false,
-            evidence: [
-              {
-                path: "dist/ci/compose-smoke.json",
-                status: "satisfied",
-                schemaVersion: "romeo.compose-smoke.v1",
-                evidenceStatus: "passed",
-              },
-            ],
-          },
-        ],
-        exceptions: [
-          {
-            gateId: "phase21.kubernetes_networkpolicy_enforcement",
-            owner: "owner@example.com",
-            approvedBy: "approver@example.com",
-            rationale: "RAW_EXCEPTION_RATIONALE_SENTINEL",
-          },
-        ],
-      }),
-      "utf8",
-    );
-    writeFileSync(
-      preflightPath,
-      JSON.stringify({
-        schemaVersion: "romeo.ga-target-preflight.v1",
-        generatedAt: "2026-07-02T00:05:00.000Z",
-        status: "blocked",
-        checklist: {
-          path: "/tmp/raw-secret-path/ga-checklist.json",
-          schemaVersion: "romeo.ga-checklist.v1",
-          status: "blocked",
-          summary: {
-            total: 2,
-            satisfied: 1,
-            excepted: 0,
-            blocked: 1,
-            environmentRequired: 1,
-            securityCriticalBlocked: 1,
-          },
-        },
-        summary: {
-          total: 1,
-          ready: 0,
-          blocked: 1,
-          securityCriticalBlocked: 1,
-        },
-        gates: [
-          {
-            id: "phase21.kubernetes_networkpolicy_enforcement",
-            phase: "21",
-            title: "Kubernetes NetworkPolicy CNI enforcement",
-            status: "blocked",
-            environmentRequired: true,
-            securityCritical: true,
-            evidence: [
-              {
-                path: "/tmp/raw-secret-path/kubernetes-networkpolicy.json",
-                status: "missing",
-              },
-            ],
-            command:
-              "pnpm smoke:kubernetes:networkpolicy -- --output dist/ci/kubernetes-networkpolicy-smoke.json",
-            checks: [
-              {
-                name: "kubernetes_cluster",
-                status: "blocked",
-                context: "rancher-desktop",
-                reason: "cluster_unreachable",
-              },
-              {
-                name: "env:ROMEO_API_KEY",
-                status: "blocked",
-                configured: false,
-              },
-              {
-                name: "target_api",
-                status: "ready",
-                origin: "https://romeo.example.com",
-              },
-              {
-                name: "file:dist/release/release-manifest.json",
-                status: "blocked",
-                path: "/tmp/raw-secret-path/release-manifest.json",
-              },
-            ],
-            notes: ["Run from the operator network only."],
-          },
-        ],
-        redaction: {
-          commandOutputReturned: false,
-          rawEnvironmentValuesReturned: false,
-          rawTokensReturned: false,
-          rawEvidenceBodiesReturned: false,
-          unsafeAbsoluteEvidencePathsReturned: false,
-        },
-        rawCommandOutput: "RAW_PREFLIGHT_COMMAND_OUTPUT_SENTINEL",
-        rawEnvironmentValue: "RAW_PREFLIGHT_TOKEN_SENTINEL",
-      }),
-      "utf8",
-    );
-    writeFileSync(
-      planPath,
-      JSON.stringify({
-        schemaVersion: "romeo.ga-target-evidence-plan.v1",
-        generatedAt: "2026-07-02T00:06:00.000Z",
-        status: "blocked",
-        source: {
-          preflightPath: "/tmp/raw-secret-path/ga-target-preflight.json",
-          preflightSchemaVersion: "romeo.ga-target-preflight.v1",
-          preflightStatus: "blocked",
-          checklist: {
-            status: "blocked",
-            schemaVersion: "romeo.ga-checklist.v1",
-            summary: {
-              total: 2,
-              satisfied: 1,
-              excepted: 0,
-              blocked: 1,
-              environmentRequired: 1,
-              securityCriticalBlocked: 1,
-            },
-          },
-        },
-        summary: {
-          total: 1,
-          ready: 0,
-          blocked: 1,
-          environmentRequired: 1,
-          securityCriticalBlocked: 1,
-          phaseCount: 1,
-          commandCount: 1,
-          evidenceTargetCount: 1,
-          blockedCheckCount: 3,
-        },
-        phases: [
-          {
-            phase: "21",
-            status: "blocked",
-            total: 1,
-            ready: 0,
-            blocked: 1,
-            securityCriticalBlocked: 1,
-            gateIds: ["phase21.kubernetes_networkpolicy_enforcement"],
-          },
-        ],
-        gates: [
-          {
-            order: 1,
-            id: "phase21.kubernetes_networkpolicy_enforcement",
-            phase: "21",
-            title: "Kubernetes NetworkPolicy CNI enforcement",
-            status: "blocked",
-            environmentRequired: true,
-            securityCritical: true,
-            command:
-              "pnpm smoke:kubernetes:networkpolicy -- --output dist/ci/kubernetes-networkpolicy-smoke.json",
-            commandRedacted: false,
-            evidenceTargets: [
-              {
-                path: "/tmp/raw-secret-path/kubernetes-networkpolicy.json",
-                status: "missing",
-              },
-            ],
-            requiredCommands: ["kubectl"],
-            requiredEnvironment: ["ROMEO_API_KEY"],
-            anyOfEnvironment: [["NPM_TOKEN", "NODE_AUTH_TOKEN"]],
-            optionalEnvironment: ["RELEASE_ASSET_TOKEN"],
-            requiredFiles: ["/tmp/raw-secret-path/release-manifest.json"],
-            checks: {
-              total: 4,
-              ready: 1,
-              blocked: 3,
-              optional: 0,
-              unknown: 0,
-              blockedReasons: ["cluster_unreachable"],
-            },
-            blockedChecks: [
-              {
-                name: "kubernetes_cluster",
-                reason: "cluster_unreachable",
-              },
-              {
-                name: "env:ROMEO_API_KEY",
-                reason: "env:ROMEO_API_KEY_blocked",
-                configured: false,
-                rawValue: "RAW_TARGET_PLAN_TOKEN_SENTINEL",
-              },
-            ],
-            notes: ["Run from the operator network only."],
-            rawCommandOutput: "RAW_TARGET_PLAN_OUTPUT_SENTINEL",
-          },
-        ],
-        redaction: {
-          commandOutputReturned: false,
-          rawEnvironmentValuesReturned: false,
-          rawTokensReturned: false,
-          rawEvidenceBodiesReturned: false,
-          unsafeAbsoluteEvidencePathsReturned: false,
-          rawPreflightCheckBodiesReturned: false,
-        },
-      }),
-      "utf8",
-    );
-    writeFileSync(
-      executionPath,
-      JSON.stringify({
-        schemaVersion: "romeo.ga-target-execution.v1",
-        generatedAt: "2026-07-02T00:07:00.000Z",
-        status: "blocked",
-        source: {
-          targetPlanPath: "/tmp/raw-secret-path/ga-target-plan.json",
-          targetPlanSchemaVersion: "romeo.ga-target-evidence-plan.v1",
-          targetPlanStatus: "blocked",
-          checklist: {
-            status: "blocked",
-            schemaVersion: "romeo.ga-checklist.v1",
-            summary: {
-              total: 2,
-              satisfied: 1,
-              excepted: 0,
-              blocked: 1,
-              environmentRequired: 1,
-              securityCriticalBlocked: 1,
-            },
-          },
-        },
-        execution: {
-          startedAt: "2026-07-02T00:07:00.000Z",
-          completedAt: "2026-07-02T00:07:01.000Z",
-          confirmed: false,
-          continueOnFailure: false,
-          timeoutMs: 3600000,
-          selectedGateCount: 1,
-          commandsExecuted: 0,
-        },
-        envFile: {
-          configured: true,
-          loaded: true,
-          path: "/tmp/raw-secret-path/ga-target.env.private",
-          variableCount: 2,
-          populatedVariableCount: 1,
-          blankVariableCount: 1,
-          duplicateCount: 0,
-          commentOrBlankLineCount: 1,
-          appliedVariableCount: 1,
-          variableNames: ["ROMEO_API_KEY", "KUBERNETES_NAMESPACE"],
-          warningCodes: [],
-          rawValuesReturned: false,
-          rawFileBodyReturned: false,
-          shellSourced: false,
-          blankValuesApplied: false,
-          rawValue: "RAW_TARGET_EXECUTION_ENV_SENTINEL",
-        },
-        summary: {
-          total: 1,
-          readyToRun: 0,
-          executed: 0,
-          passed: 0,
-          failed: 0,
-          skipped: 1,
-          confirmationRequired: 0,
-          blocked: 1,
-          redacted: 0,
-          commandMissing: 0,
-        },
-        gates: [
-          {
-            id: "phase21.kubernetes_networkpolicy_enforcement",
-            phase: "21",
-            title: "Kubernetes NetworkPolicy CNI enforcement",
-            targetStatus: "blocked",
-            operatorActionState: "blocked_on_prerequisites",
-            commandHash:
-              "ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789",
-            commandAvailable: true,
-            commandRedacted: false,
-            executionStatus: "skipped",
-            skippedReason: "preflight_not_ready",
-            startedAt: "2026-07-02T00:07:00.000Z",
-            completedAt: "2026-07-02T00:07:00.000Z",
-            durationMs: 0,
-            evidenceTargets: [
-              {
-                path: "/tmp/raw-secret-path/kubernetes-networkpolicy.json",
-                status: "missing",
-              },
-            ],
-            blockedReasonCodes: ["cluster_unreachable"],
-            rawCommand: "RAW_TARGET_EXECUTION_COMMAND_SENTINEL",
-            rawOutput: "RAW_TARGET_EXECUTION_OUTPUT_SENTINEL",
-          },
-        ],
-        redaction: {
-          commandTextReturned: false,
-          commandOutputReturned: false,
-          rawEnvironmentValuesReturned: false,
-          rawTokensReturned: false,
-          rawEvidenceBodiesReturned: false,
-          unsafeAbsoluteEvidencePathsReturned: false,
-          rawTargetPlanCheckBodiesReturned: false,
-        },
-      }),
-      "utf8",
-    );
-    writeFileSync(
-      bundlePath,
-      JSON.stringify({
-        schemaVersion: "romeo.ga-evidence-bundle.v1",
-        generatedAt: "2026-07-02T00:10:00.000Z",
-        status: "blocked",
-        requirements: {
-          checklistPassed: true,
-          readbackValidation: true,
-          supportBundle: true,
-          supportRedaction: true,
-          docsCommandCheck: true,
-          tenantIsolation: true,
-        },
-        release: {
-          name: "romeo",
-          version: "1.2.3",
-          artifactCount: 4,
-          manifest: {
-            path: "/tmp/raw-secret-path/release-manifest.json",
-          },
-        },
-        ga: {
-          checklist: {
-            path: "/tmp/raw-secret-path/ga-checklist.json",
-          },
-          status: "blocked",
-          strict: false,
-          summary: {
-            total: 2,
-            satisfied: 1,
-            excepted: 0,
-            blocked: 1,
-            environmentRequired: 1,
-            securityCriticalBlocked: 1,
-          },
-          profile: "full-product-enterprise",
-          fullProductEnterpriseRequired: true,
-          qdrantLiveRequired: true,
-          qdrantDrRequired: false,
-          ciGovernanceLiveRequired: false,
-          kedaRequired: false,
-          browserAutomationRequired: false,
-          identityLiveRequired: false,
-          dataConnectorLiveRequired: false,
-          toolDispatchLiveRequired: false,
-          voiceProviderLiveRequired: true,
-          notificationAdapterLiveRequired: true,
-          analyticsAuthzLiveRequired: false,
-          targetQualityVectorComparisonRequired: false,
-          dataRightsRetentionLiveRequired: false,
-          billingOperationsLiveRequired: false,
-          auditIntegrityLiveRequired: false,
-          tenantPurgeLiveRequired: false,
-          supportBundleLiveRequired: false,
-          targetResilienceDrillsRequired: false,
-          postgresOperationsLiveRequired: false,
-          blockedGateIds: ["phase21.kubernetes_networkpolicy_enforcement"],
-          exceptionCount: 1,
-        },
-        inventory: {
-          evidenceFileCount: 12,
-          totalBytes: 3456,
-          sha256:
-            "ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789",
-        },
-        checks: [
-          { name: "release manifest name is Romeo", status: "pass" },
-          {
-            name: "Required file contains /tmp/raw-secret-path/secret.json",
-            status: "fail",
-          },
-        ],
-        blockers: [
-          {
-            code: "ga_checklist_not_passed",
-            message: "Required file contains /tmp/raw-secret-path/secret.json",
-          },
-        ],
-        redaction: {
-          evidenceBodiesIncluded: false,
-          exceptionRationaleIncluded: false,
-          rawEvidencePathsIncluded: false,
-          rawSecretsIncluded: false,
-          rawLogsIncluded: false,
-          rawPromptsIncluded: false,
-          rawProviderPayloadsIncluded: false,
-          rawConnectorPayloadsIncluded: false,
-        },
-        rawEvidenceBody: "RAW_GA_BUNDLE_EVIDENCE_BODY_SENTINEL",
-      }),
-      "utf8",
-    );
-    const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: testEnv({
-        GA_CHECKLIST_PATH: checklistPath,
-        GA_TARGET_PREFLIGHT_PATH: preflightPath,
-        GA_TARGET_PLAN_PATH: planPath,
-        GA_TARGET_EXECUTION_PATH: executionPath,
-        GA_EVIDENCE_BUNDLE_PATH: bundlePath,
-      }),
-    });
-
-    const response = await api.request("/api/v1/admin/ga/evidence-posture");
-    const body = await response.json();
-    const serialized = JSON.stringify(body);
-
-    expect(response.status).toBe(200);
-    expect(body.data.schema).toBe("romeo.ga-evidence-posture.v1");
-    expect(body.data.status).toBe("attention_required");
-    expect(body.data.checklist.status).toBe("blocked");
-    expect(body.data.checklist.summary).toMatchObject({
-      total: 2,
-      satisfied: 1,
-      blocked: 1,
-      environmentRequired: 1,
-      securityCriticalBlocked: 1,
-    });
-    expect(body.data.checklist.exceptionCount).toBe(1);
-    expect(body.data.checklist.target).toMatchObject({
-      profile: "full-product-enterprise",
-      fullProductEnterpriseRequired: true,
-      qdrantLiveRequired: true,
-      voiceProviderLiveRequired: true,
-      notificationAdapterLiveRequired: true,
-    });
-    expect(body.data.targetPreflight.status).toBe("blocked");
-    expect(body.data.targetPreflight.summary).toMatchObject({
-      total: 1,
-      ready: 0,
-      blocked: 1,
-      securityCriticalBlocked: 1,
-    });
-    expect(body.data.targetPreflight.gates[0]).toMatchObject({
-      id: "phase21.kubernetes_networkpolicy_enforcement",
-      status: "blocked",
-      command:
-        "pnpm smoke:kubernetes:networkpolicy -- --output dist/ci/kubernetes-networkpolicy-smoke.json",
-    });
-    expect(body.data.targetPreflight.gates[0].evidence[0].path).toBe(
-      "redacted_path",
-    );
-    expect(body.data.targetPreflight.gates[0].checks).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          name: "kubernetes_cluster",
-          status: "blocked",
-          reason: "cluster_unreachable",
-        }),
-        expect.objectContaining({
-          name: "target_api",
-          status: "ready",
-          origin: "https://romeo.example.com",
-        }),
-        expect.objectContaining({
-          name: "file:dist/release/release-manifest.json",
-          path: "redacted_path",
-        }),
-      ]),
-    );
-    expect(body.data.targetPlan.status).toBe("blocked");
-    expect(body.data.targetPlan.summary).toMatchObject({
-      total: 1,
-      ready: 0,
-      blocked: 1,
-      environmentRequired: 1,
-      securityCriticalBlocked: 1,
-      phaseCount: 1,
-      commandCount: 1,
-      evidenceTargetCount: 1,
-      blockedCheckCount: 3,
-    });
-    expect(body.data.targetPlan.phases[0]).toMatchObject({
-      phase: "21",
-      status: "blocked",
-      blocked: 1,
-      securityCriticalBlocked: 1,
-    });
-    expect(body.data.targetPlan.gates[0]).toMatchObject({
-      id: "phase21.kubernetes_networkpolicy_enforcement",
-      status: "blocked",
-      command:
-        "pnpm smoke:kubernetes:networkpolicy -- --output dist/ci/kubernetes-networkpolicy-smoke.json",
-      commandRedacted: false,
-      operatorAction: {
-        state: "blocked_on_prerequisites",
-        commandAvailable: true,
-        prerequisiteBlocked: true,
-        blockedReasonCodes: ["cluster_unreachable"],
-      },
-      requiredCommands: ["kubectl"],
-      requiredEnvironment: ["ROMEO_API_KEY"],
-      optionalEnvironment: ["RELEASE_ASSET_TOKEN"],
-    });
-    expect(body.data.targetPlan.gates[0].evidenceTargets[0].path).toBe(
-      "redacted_path",
-    );
-    expect(body.data.targetPlan.gates[0].requiredFiles).toEqual([
-      "redacted_path",
-    ]);
-    expect(body.data.targetPlan.gates[0].checks.blockedReasons).toContain(
-      "cluster_unreachable",
-    );
-    expect(body.data.targetExecution.status).toBe("blocked");
-    expect(body.data.targetExecution.summary).toMatchObject({
-      total: 1,
-      readyToRun: 0,
-      executed: 0,
-      skipped: 1,
-      blocked: 1,
-    });
-    expect(body.data.targetExecution.execution).toMatchObject({
-      confirmed: false,
-      selectedGateCount: 1,
-      commandsExecuted: 0,
-    });
-    expect(body.data.targetExecution.envFile).toMatchObject({
-      configured: true,
-      loaded: true,
-      variableCount: 2,
-      populatedVariableCount: 1,
-      blankVariableCount: 1,
-      appliedVariableCount: 1,
-      variableNames: ["ROMEO_API_KEY", "KUBERNETES_NAMESPACE"],
-      rawValuesReturned: false,
-      rawFileBodyReturned: false,
-      shellSourced: false,
-      blankValuesApplied: false,
-    });
-    expect(JSON.stringify(body.data.targetExecution.envFile)).not.toContain(
-      "RAW_TARGET_EXECUTION_ENV_SENTINEL",
-    );
-    expect(body.data.targetExecution.gates[0]).toMatchObject({
-      id: "phase21.kubernetes_networkpolicy_enforcement",
-      targetStatus: "blocked",
-      executionStatus: "skipped",
-      skippedReason: "preflight_not_ready",
-      commandHash:
-        "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
-      blockedReasonCodes: ["cluster_unreachable"],
-    });
-    expect(body.data.targetExecution.gates[0].evidenceTargets[0].path).toBe(
-      "redacted_path",
-    );
-    expect(body.data.liveGateReadiness).toHaveLength(1);
-    expect(body.data.liveGateReadiness[0]).toMatchObject({
-      id: "phase21.kubernetes_networkpolicy_enforcement",
-      checklistStatus: "blocked",
-      preflightStatus: "blocked",
-      command:
-        "pnpm smoke:kubernetes:networkpolicy -- --output dist/ci/kubernetes-networkpolicy-smoke.json",
-      checklistEvidence: {
-        total: 1,
-        satisfied: 0,
-        missing: 1,
-        failed: 0,
-        invalid: 0,
-        unknown: 0,
-      },
-      preflightEvidence: {
-        total: 1,
-        ready: 0,
-        missing: 1,
-        blocked: 0,
-        failed: 0,
-        unknown: 0,
-      },
-      checks: {
-        total: 4,
-        ready: 1,
-        blocked: 3,
-        optional: 0,
-        unknown: 0,
-      },
-      warnings: ["preflight_blocked", "live_evidence_missing"],
-    });
-    expect(body.data.liveGateReadiness[0].checks.blockedReasons).toContain(
-      "cluster_unreachable",
-    );
-    expect(body.data.bundle.status).toBe("blocked");
-    expect(body.data.bundle.release).toMatchObject({
-      name: "romeo",
-      version: "1.2.3",
-      artifactCount: 4,
-    });
-    expect(body.data.bundle.ga).toMatchObject({
-      status: "blocked",
-      strict: false,
-      profile: "full-product-enterprise",
-      fullProductEnterpriseRequired: true,
-      qdrantLiveRequired: true,
-      qdrantDrRequired: false,
-      ciGovernanceLiveRequired: false,
-      kedaRequired: false,
-      browserAutomationRequired: false,
-      identityLiveRequired: false,
-      dataConnectorLiveRequired: false,
-      toolDispatchLiveRequired: false,
-      voiceProviderLiveRequired: true,
-      notificationAdapterLiveRequired: true,
-      analyticsAuthzLiveRequired: false,
-      targetQualityVectorComparisonRequired: false,
-      dataRightsRetentionLiveRequired: false,
-      billingOperationsLiveRequired: false,
-      auditIntegrityLiveRequired: false,
-      tenantPurgeLiveRequired: false,
-      supportBundleLiveRequired: false,
-      targetResilienceDrillsRequired: false,
-      postgresOperationsLiveRequired: false,
-      exceptionCount: 1,
-    });
-    expect(body.data.bundle.ga.blockedGateIds).toEqual([
-      "phase21.kubernetes_networkpolicy_enforcement",
-    ]);
-    expect(body.data.bundle.inventory).toMatchObject({
-      evidenceFileCount: 12,
-      totalBytes: 3456,
-      sha256:
-        "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
-    });
-    expect(body.data.bundle.checks).toEqual({
-      total: 2,
-      passed: 1,
-      failed: 1,
-    });
-    expect(body.data.bundle.blockerCount).toBe(1);
-    expect(body.data.bundle.blockerCodes).toEqual(["ga_checklist_not_passed"]);
-    expect(body.data.bundle.redaction.rawEvidencePathsIncluded).toBe(false);
-    expect(body.data.requiredLiveBlockers).toEqual([
-      {
-        id: "phase21.kubernetes_networkpolicy_enforcement",
-        phase: "21",
-        title: "Kubernetes NetworkPolicy CNI enforcement",
-        securityCritical: true,
-      },
-    ]);
-    expect(body.data.gates[0].evidence[0].path).toBe("redacted_path");
-    expect(body.data.gates[0].evidence[0].failureCodes).toEqual([
-      "ga_checklist_evidence_failure_codes_present",
-    ]);
-    expect(body.data.gates[0].exception).toEqual({
-      status: "invalid",
-      expiresAt: "2026-12-31T23:59:59.000Z",
-      failureCodes: ["ga_checklist_exception_failure_codes_present"],
-    });
-    expect(body.data.redaction.absoluteChecklistPathReturned).toBe(false);
-    expect(body.data.redaction.absoluteBundlePathReturned).toBe(false);
-    expect(body.data.redaction.bundleBlockerMessagesReturned).toBe(false);
-    expect(body.data.redaction.bundleEvidenceFileBodiesReturned).toBe(false);
-    expect(body.data.redaction.bundleEvidencePathsReturned).toBe(false);
-    expect(body.data.redaction.evidenceFileBodiesReturned).toBe(false);
-    expect(body.data.redaction.preflightCommandOutputReturned).toBe(false);
-    expect(body.data.redaction.preflightEnvironmentValuesReturned).toBe(false);
-    expect(body.data.redaction.rawPreflightEvidencePathsReturned).toBe(false);
-    expect(body.data.redaction.targetPlanCommandOutputReturned).toBe(false);
-    expect(body.data.redaction.targetPlanEnvironmentValuesReturned).toBe(false);
-    expect(body.data.redaction.rawTargetPlanEvidencePathsReturned).toBe(false);
-    expect(body.data.redaction.targetExecutionCommandTextReturned).toBe(false);
-    expect(body.data.redaction.targetExecutionCommandOutputReturned).toBe(
-      false,
-    );
-    expect(body.data.redaction.targetExecutionEnvironmentValuesReturned).toBe(
-      false,
-    );
-    expect(body.data.redaction.targetExecutionEnvFileValuesReturned).toBe(
-      false,
-    );
-    expect(body.data.redaction.rawTargetExecutionEvidencePathsReturned).toBe(
-      false,
-    );
-    expect(serialized).not.toContain(checklistPath);
-    expect(serialized).not.toContain(preflightPath);
-    expect(serialized).not.toContain(planPath);
-    expect(serialized).not.toContain(executionPath);
-    expect(serialized).not.toContain(bundlePath);
-    expect(serialized).not.toContain(directory);
-    expect(serialized).not.toContain("owner@example.com");
-    expect(serialized).not.toContain("approver@example.com");
-    expect(serialized).not.toContain("RAW_EXCEPTION_RATIONALE_SENTINEL");
-    expect(serialized).not.toContain("RAW_EXCEPTION_RISK_SENTINEL");
-    expect(serialized).not.toContain("gate_not_exception_allowed");
-    expect(serialized).not.toContain("raw_customer_ga_evidence_failure");
-    expect(serialized).not.toContain("raw_customer_ga_exception_failure");
-    expect(serialized).not.toContain("RAW_PREFLIGHT_COMMAND_OUTPUT_SENTINEL");
-    expect(serialized).not.toContain("RAW_PREFLIGHT_TOKEN_SENTINEL");
-    expect(serialized).not.toContain("RAW_TARGET_PLAN_OUTPUT_SENTINEL");
-    expect(serialized).not.toContain("RAW_TARGET_PLAN_TOKEN_SENTINEL");
-    expect(serialized).not.toContain("RAW_TARGET_EXECUTION_COMMAND_SENTINEL");
-    expect(serialized).not.toContain("RAW_TARGET_EXECUTION_OUTPUT_SENTINEL");
-    expect(serialized).not.toContain("RAW_GA_BUNDLE_EVIDENCE_BODY_SENTINEL");
-    expect(serialized).not.toContain("Required file contains");
-    expect(serialized).not.toContain("/tmp/raw-secret-path");
   });
 
   it("rejects request bodies larger than the configured API ingress limit", async () => {
@@ -5030,7 +3275,7 @@ describe("Romeo API thin slice", () => {
 
   it("rate limits public API traffic with sanitized 429 responses", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: openWebUiBridgeEnv({
+      env: testEnv({
         DEV_SEEDED_LOGIN: "false",
         HTTP_RATE_LIMIT_DRIVER: "memory",
         HTTP_RATE_LIMIT_PUBLIC_MAX: "2",
@@ -5038,20 +3283,20 @@ describe("Romeo API thin slice", () => {
       }),
     });
 
-    const first = await api.request("/api/v1/openwebui/config", {
+    const first = await api.request("/api/v1/unknown-public-path", {
       headers: { "x-request-id": "rate_public_1" },
     });
-    const second = await api.request("/api/v1/openwebui/config", {
+    const second = await api.request("/api/v1/unknown-public-path", {
       headers: { "x-request-id": "rate_public_2" },
     });
-    const third = await api.request("/api/v1/openwebui/config", {
+    const third = await api.request("/api/v1/unknown-public-path", {
       headers: { "x-request-id": "rate_public_3" },
     });
     const body = await third.json();
     const serialized = JSON.stringify(body);
 
-    expect(first.status).toBe(200);
-    expect(second.status).toBe(200);
+    expect(first.status).not.toBe(429);
+    expect(second.status).not.toBe(429);
     expect(third.status).toBe(429);
     expect(third.headers.get("x-request-id")).toBe("rate_public_3");
     expect(third.headers.get("ratelimit-limit")).toBe("2");
@@ -5060,7 +3305,7 @@ describe("Romeo API thin slice", () => {
     expect(body.error.code).toBe("rate_limit_exceeded");
     expect(body.error.details).toMatchObject({
       limit: 2,
-      scope: "public",
+      scope: "anonymous",
       windowSeconds: 60,
     });
     expect(serialized).not.toContain("127.0.0.1");
@@ -5828,13 +4073,18 @@ describe("Romeo API thin slice", () => {
       },
     );
     const enrollment = await enrollmentResponse.json();
-    const totpCode = await generate({
-      strategy: "totp",
-      secret: enrollment.data.secret,
-      algorithm: "sha1",
-      digits: 6,
-      period: 30,
-    });
+    // Each TOTP use must present a newer time-step (replay protection), so the
+    // enrollment uses the previous step and later uses the current/next ones.
+    const totpAt = (offsetSeconds: number) =>
+      generate({
+        strategy: "totp",
+        secret: enrollment.data.secret,
+        algorithm: "sha1",
+        digits: 6,
+        period: 30,
+        epoch: Math.floor(Date.now() / 1000) + offsetSeconds,
+      });
+    const enrollmentTotpCode = await totpAt(-30);
     const confirmResponse = await secureApi.request(
       "/api/v1/auth/local/mfa/totp/confirm",
       {
@@ -5844,7 +4094,7 @@ describe("Romeo API thin slice", () => {
         }),
         body: JSON.stringify({
           factorId: enrollment.data.factor.id,
-          code: totpCode,
+          code: enrollmentTotpCode,
         }),
       },
     );
@@ -5860,6 +4110,7 @@ describe("Romeo API thin slice", () => {
       },
     );
     const mfaLogin = await mfaLoginResponse.json();
+    const totpCode = await totpAt(0);
     const badTotpCode = totpCode === "000000" ? "000001" : "000000";
     const failedMfaVerifyResponse = await secureApi.request(
       "/api/v1/auth/local/mfa/verify",
@@ -5910,7 +4161,7 @@ describe("Romeo API thin slice", () => {
         headers: browserMutationHeaders(mfaCookie, {
           "content-type": "application/json",
         }),
-        body: JSON.stringify({ totpCode }),
+        body: JSON.stringify({ totpCode: await totpAt(30) }),
       },
     );
     const recoveryCodes = await recoveryCodesResponse.json();
@@ -8181,11 +6432,18 @@ describe("Romeo API thin slice", () => {
   });
 
   it("completes browser GitHub OAuth2 PKCE login with provider settings and managed secret refs", async () => {
-    const env = testEnv({
-      APP_ORIGIN: "https://romeo.example",
+    const sharedEnv = {
       SESSION_SECRET: "prod-session-secret-32-bytes-long",
       WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
+    };
+    const env = testEnv({
+      ...sharedEnv,
+      APP_ORIGIN: "https://romeo.example",
+      DEV_SEEDED_LOGIN: "false",
     });
+    // The seeded admin is confined to loopback origins, so provider settings
+    // are administered through a loopback development API on the same store.
+    const adminEnv = testEnv(sharedEnv);
     const rawSecret = "GITHUB-CLIENT-SECRET-SHOULD-NOT-LEAK";
     let tokenExchangeParams: URLSearchParams | undefined;
     const githubFetch: typeof fetch = async (input, init) => {
@@ -8241,15 +6499,21 @@ describe("Romeo API thin slice", () => {
       slug: "github-platform",
       createdAt: new Date().toISOString(),
     });
-    const api = createRomeoApi(repository, {
-      delegatedOAuthFetch: githubFetch,
-      env,
+    const apiOptions = {
+      oauth2ProviderFetch: githubFetch,
+      // The admin connection test probes GitHub through the OIDC fetch.
+      oidcFetch: githubFetch,
       secretResolver: new EnvironmentSecretResolver({
         GITHUB_CLIENT_SECRET: rawSecret,
       }),
+    };
+    const api = createRomeoApi(repository, { ...apiOptions, env });
+    const adminApi = createRomeoApi(repository, {
+      ...apiOptions,
+      env: adminEnv,
     });
 
-    const updateResponse = await api.request(
+    const updateResponse = await adminApi.request(
       "/api/v1/admin/auth-providers/settings",
       {
         method: "PATCH",
@@ -8279,7 +6543,7 @@ describe("Romeo API thin slice", () => {
       },
     );
     const updated = await updateResponse.json();
-    const testResponse = await api.request(
+    const testResponse = await adminApi.request(
       "/api/v1/admin/auth-providers/settings/test",
       {
         method: "POST",
@@ -10216,853 +8480,6 @@ describe("Romeo API thin slice", () => {
     expect(JSON.stringify(disabledModel)).not.toContain("localhost:11434");
   });
 
-  it("serves public OpenWebUI-compatible boot metadata without secrets or a Romeo envelope", async () => {
-    const secureApi = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: openWebUiBridgeEnv({
-        DEV_SEEDED_LOGIN: "false",
-        SESSION_SECRET: "prod-session-secret-32-bytes-long",
-        WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
-      }),
-    });
-
-    const configResponse = await secureApi.request("/api/config");
-    const config = await configResponse.json();
-    const versionedConfigResponse = await secureApi.request(
-      "/api/v1/openwebui/config",
-    );
-    const versionedConfig = await versionedConfigResponse.json();
-    const versionResponse = await secureApi.request("/api/version");
-    const version = await versionResponse.json();
-    const versionedVersionResponse = await secureApi.request(
-      "/api/v1/openwebui/version",
-    );
-    const versionedVersion = await versionedVersionResponse.json();
-    const updatesResponse = await secureApi.request("/api/version/updates");
-    const updates = await updatesResponse.json();
-    const versionedUpdatesResponse = await secureApi.request(
-      "/api/v1/openwebui/version/updates",
-    );
-    const versionedUpdates = await versionedUpdatesResponse.json();
-
-    expect(configResponse.status).toBe(200);
-    expect(config.data).toBeUndefined();
-    expect(config.status).toBe(true);
-    expect(config.name).toBe("Romeo");
-    expect(config.version).toBe("0.1.0");
-    expect(config.features).toMatchObject({
-      auth: true,
-      enable_api_keys: true,
-      enable_folders: true,
-      enable_channels: true,
-      enable_automations: true,
-      enable_web_search: false,
-    });
-    expect(versionedConfig).toEqual(config);
-    expect(versionResponse.status).toBe(200);
-    expect(version).toEqual({ version: "0.1.0", deployment_id: "romeo" });
-    expect(versionedVersion).toEqual(version);
-    expect(updatesResponse.status).toBe(200);
-    expect(updates).toEqual({ current: "0.1.0", latest: "0.1.0" });
-    expect(versionedUpdates).toEqual(updates);
-    expect(JSON.stringify(config)).not.toContain("prod-session-secret");
-    expect(JSON.stringify(config)).not.toContain("WEBHOOK_SIGNING_KEY");
-    expect(JSON.stringify(version)).not.toContain("SESSION_SECRET");
-  });
-
-  it("serves authenticated OpenWebUI-compatible session user metadata without echoing bearer tokens", async () => {
-    const repository = new InMemoryRomeoRepository();
-    const token = "rmk_openwebui_session_user";
-    await repository.createApiKey({
-      id: "api_key_openwebui_session_user",
-      orgId: "org_default",
-      userId: "user_dev_admin",
-      name: "OpenWebUI session user",
-      hashedToken: await hashApiKey(token),
-      scopes: ["me:read", "chats:read", "runs:create", "models:use"],
-      createdAt: new Date().toISOString(),
-    });
-    const secureApi = createRomeoApi(repository, {
-      env: openWebUiBridgeEnv({
-        DEV_SEEDED_LOGIN: "false",
-        SESSION_SECRET: "prod-session-secret-32-bytes-long",
-        WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
-      }),
-    });
-
-    const unauthenticatedResponse = await secureApi.request("/api/v1/auths/");
-    const response = await secureApi.request("/api/v1/auths/", {
-      headers: { authorization: `Bearer ${token}` },
-    });
-    const body = await response.json();
-
-    expect(unauthenticatedResponse.status).toBe(401);
-    expect(response.status).toBe(200);
-    expect(body.data).toBeUndefined();
-    expect(body).toMatchObject({
-      token: null,
-      token_type: "Bearer",
-      expires_at: null,
-      id: "user_dev_admin",
-      email: "admin@romeo.local",
-      name: "Romeo Admin",
-      role: "admin",
-      profile_image_url: "",
-      bio: null,
-      gender: null,
-      date_of_birth: null,
-      status_emoji: "",
-      status_message: "",
-      status_expires_at: null,
-    });
-    expect(body.permissions.chat.temporary).toBe(true);
-    expect(body.permissions.workspace.models).toBe(true);
-    expect(body.permissions.workspace.knowledge).toBe(false);
-    expect(JSON.stringify(body)).not.toContain(token);
-    expect(JSON.stringify(body)).not.toContain("prod-session-secret");
-    expect(JSON.stringify(body)).not.toContain("WEBHOOK_SIGNING_KEY");
-  });
-
-  it("serves OpenWebUI-compatible chat, folder, and channel sidebar routes without Romeo envelopes", async () => {
-    const repository = new InMemoryRomeoRepository();
-    const api = createRomeoApi(repository, {
-      env: openWebUiBridgeEnv(),
-    });
-
-    const initialChatsResponse = await api.request("/api/v1/chats/");
-    const initialChats = await initialChatsResponse.json();
-    const chatListAliasResponse = await api.request("/api/v1/chats/list");
-    const chatListAlias = await chatListAliasResponse.json();
-    const pinnedResponse = await api.request("/api/v1/chats/pinned");
-    const pinned = await pinnedResponse.json();
-    const initialFoldersResponse = await api.request("/api/v1/folders/");
-    const initialFolders = await initialFoldersResponse.json();
-    const channelsResponse = await api.request("/api/v1/channels/");
-    const channels = await channelsResponse.json();
-    const channelsAliasResponse = await api.request("/api/v1/channels/list");
-    const channelsAlias = await channelsAliasResponse.json();
-
-    expect(initialChatsResponse.status).toBe(200);
-    expect(initialChats.data).toBeUndefined();
-    expect(initialChats[0]).toMatchObject({
-      id: "chat_welcome",
-      title: "Welcome",
-      last_read_at: null,
-    });
-    expect(typeof initialChats[0].updated_at).toBe("number");
-    expect(chatListAlias).toEqual(initialChats);
-    expect(pinned).toEqual([]);
-    expect(initialFolders).toEqual([]);
-    expect(channels).toEqual([]);
-    expect(channelsAlias).toEqual([]);
-
-    await repository.createUser({
-      id: "user_openwebui_channel_api",
-      orgId: "org_default",
-      email: "channel-user@romeo.local",
-      name: "Channel User",
-    });
-    await repository.createResourceGrant({
-      id: "grant_openwebui_channel_member_workspace_read",
-      resourceType: "workspace",
-      resourceId: "workspace_default",
-      principalType: "user",
-      principalId: "user_openwebui_channel_api",
-      permission: "read",
-    });
-    const channelUserToken = "rmk_openwebui_channel_member";
-    await repository.createApiKey({
-      id: "api_key_openwebui_channel_member",
-      orgId: "org_default",
-      userId: "user_openwebui_channel_api",
-      name: "OpenWebUI channel member",
-      hashedToken: await hashApiKey(channelUserToken),
-      scopes: ["chats:read", "chats:write"],
-      createdAt: new Date().toISOString(),
-    });
-
-    const folderResponse = await api.request("/api/v1/folders/", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        name: "OpenWebUI Imports",
-        meta: { icon: "folder" },
-      }),
-    });
-    const folder = await folderResponse.json();
-    const foldersAfterCreateResponse = await api.request("/api/v1/folders/");
-    const foldersAfterCreate = await foldersAfterCreateResponse.json();
-
-    expect(folderResponse.status).toBe(200);
-    expect(folder.data).toBeNull();
-    expect(folder.user_id).toBe("user_dev_admin");
-    expect(folder.name).toBe("OpenWebUI Imports");
-    expect(folder.meta).toEqual({ icon: "folder" });
-    expect(foldersAfterCreate).toEqual([
-      expect.objectContaining({
-        id: folder.id,
-        name: "OpenWebUI Imports",
-        meta: { icon: "folder" },
-        parent_id: null,
-        is_expanded: false,
-      }),
-    ]);
-
-    const childFolderResponse = await api.request("/api/v1/folders/", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        name: "Nested Imports",
-        parent_id: folder.id,
-        data: { color: "blue" },
-      }),
-    });
-    const childFolder = await childFolderResponse.json();
-    const fetchedChildFolder = await (
-      await api.request(`/api/v1/folders/${childFolder.id}`)
-    ).json();
-    const expandedChildFolder = await (
-      await api.request(`/api/v1/folders/${childFolder.id}/update/expanded`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ is_expanded: true }),
-      })
-    ).json();
-    const updatedChildFolder = await (
-      await api.request(`/api/v1/folders/${childFolder.id}/update`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          name: "Nested Imports Updated",
-          meta: { icon: "archive" },
-        }),
-      })
-    ).json();
-    const rootChildFolder = await (
-      await api.request(`/api/v1/folders/${childFolder.id}/update/parent`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ parent_id: null }),
-      })
-    ).json();
-
-    expect(childFolderResponse.status).toBe(200);
-    expect(childFolder.parent_id).toBe(folder.id);
-    expect(fetchedChildFolder.data).toEqual({ color: "blue" });
-    expect(expandedChildFolder.is_expanded).toBe(true);
-    expect(updatedChildFolder).toMatchObject({
-      name: "Nested Imports Updated",
-      meta: { icon: "archive" },
-      data: { color: "blue" },
-      is_expanded: true,
-    });
-    expect(rootChildFolder.parent_id).toBeNull();
-
-    const createdChatResponse = await api.request("/api/v1/chats/new", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        folder_id: folder.id,
-        chat: {
-          title: "OpenWebUI imported chat",
-          pinned: true,
-          history: {
-            currentId: "owui_message_2",
-            messages: {
-              owui_message_1: {
-                id: "owui_message_1",
-                role: "user",
-                content: "Summarize the workspace.",
-                timestamp: 1_719_000_000,
-              },
-              owui_message_2: {
-                id: "owui_message_2",
-                parentId: "owui_message_1",
-                role: "assistant",
-                content: "The workspace is ready.",
-                timestamp: 1_719_000_001,
-              },
-            },
-          },
-        },
-      }),
-    });
-    const createdChat = await createdChatResponse.json();
-    const importedPinnedStatus = await (
-      await api.request(`/api/v1/chats/${createdChat.id}/pinned`)
-    ).json();
-    const importedPinnedList = await (
-      await api.request("/api/v1/chats/pinned")
-    ).json();
-    const chatListWithoutPinned = await (
-      await api.request("/api/v1/chats/?include_folders=true")
-    ).json();
-    const chatListWithPinned = await (
-      await api.request(
-        "/api/v1/chats/?include_folders=true&include_pinned=true",
-      )
-    ).json();
-    const unpinnedChat = await (
-      await api.request(`/api/v1/chats/${createdChat.id}/pin`, {
-        method: "POST",
-      })
-    ).json();
-    const unpinnedStatus = await (
-      await api.request(`/api/v1/chats/${createdChat.id}/pinned`)
-    ).json();
-    const pinnedAfterUnpin = await (
-      await api.request("/api/v1/chats/pinned")
-    ).json();
-    const repinnedChat = await (
-      await api.request(`/api/v1/chats/${createdChat.id}/pin`, {
-        method: "POST",
-      })
-    ).json();
-    const pinnedFavorites = await repository.listResourceFavorites(
-      "org_default",
-      "user_dev_admin",
-    );
-    const folderChatsResponse = await api.request(
-      `/api/v1/chats/folder/${folder.id}`,
-    );
-    const folderChats = await folderChatsResponse.json();
-    const folderChatListResponse = await api.request(
-      `/api/v1/chats/folder/${folder.id}/list?page=1`,
-    );
-    const folderChatList = await folderChatListResponse.json();
-    const movedChat = await (
-      await api.request(`/api/v1/chats/${createdChat.id}/folder`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ folder_id: childFolder.id }),
-      })
-    ).json();
-    const sourceFolderAfterMove = await (
-      await api.request(`/api/v1/chats/folder/${folder.id}`)
-    ).json();
-    const searchResults = await (
-      await api.request("/api/v1/chats/search?text=Summarize&page=1")
-    ).json();
-    const initialChatTags = await (
-      await api.request(`/api/v1/chats/${createdChat.id}/tags`)
-    ).json();
-    const addedTags = await (
-      await api.request(`/api/v1/chats/${createdChat.id}/tags`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: "Important Work" }),
-      })
-    ).json();
-    const addedSecondTag = await (
-      await api.request(`/api/v1/chats/${createdChat.id}/tags`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: "Research" }),
-      })
-    ).json();
-    const tagsAfterDelete = await (
-      await api.request(`/api/v1/chats/${createdChat.id}/tags`, {
-        method: "DELETE",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: "Research" }),
-      })
-    ).json();
-    const allTags = await (await api.request("/api/v1/chats/all/tags")).json();
-    const taggedChats = await (
-      await api.request("/api/v1/chats/tags", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: "Important Work" }),
-      })
-    ).json();
-    const createdChannelResponse = await api.request(
-      "/api/v1/channels/create",
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          type: "group",
-          name: "Team Room",
-          is_private: true,
-          meta: { icon: "lock" },
-          user_ids: ["user_openwebui_channel_api"],
-        }),
-      },
-    );
-    const createdChannel = await createdChannelResponse.json();
-    const channelsAfterCreate = await (
-      await api.request("/api/v1/channels/")
-    ).json();
-    const channelListAfterCreate = await (
-      await api.request("/api/v1/channels/list")
-    ).json();
-    const fetchedChannel = await (
-      await api.request(`/api/v1/channels/${createdChannel.id}`)
-    ).json();
-    const channelMembers = await (
-      await api.request(`/api/v1/channels/${createdChannel.id}/members`)
-    ).json();
-    const updatedChannel = await (
-      await api.request(`/api/v1/channels/${createdChannel.id}/update`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          name: "Team Room Updated",
-          meta: { icon: "hash" },
-        }),
-      })
-    ).json();
-    const channelEventsResponse = await api.request(
-      `/api/v1/channels/${createdChannel.id}/events`,
-    );
-    expect(channelEventsResponse.headers.get("content-type")).toContain(
-      "text/event-stream",
-    );
-    const channelEventReader = channelEventsResponse.body?.getReader();
-    expect(channelEventReader).toBeDefined();
-    const connectedChannelEvent = await readSseEvent(
-      channelEventReader as ReadableStreamDefaultReader<Uint8Array>,
-    );
-    expect(connectedChannelEvent.event).toBe("events:channel");
-    expect(connectedChannelEvent.data).toMatchObject({
-      channel_id: createdChannel.id,
-      message_id: null,
-      data: { type: "channel:connected" },
-    });
-    const postedChannelMessage = await (
-      await api.request(`/api/v1/channels/${createdChannel.id}/messages/post`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          content: "Release window is 14:00 UTC.",
-          temp_id: "temp_channel_message_1",
-          data: { source: "test" },
-        }),
-      })
-    ).json();
-    const postedChannelEvent = await readSseEvent(
-      channelEventReader as ReadableStreamDefaultReader<Uint8Array>,
-    );
-    expect(postedChannelEvent.event).toBe("events:channel");
-    expect(postedChannelEvent.data).toMatchObject({
-      channel_id: createdChannel.id,
-      message_id: postedChannelMessage.id,
-      data: {
-        type: "message",
-        data: {
-          id: postedChannelMessage.id,
-          temp_id: "temp_channel_message_1",
-          content: "Release window is 14:00 UTC.",
-        },
-      },
-    });
-    await (
-      channelEventReader as ReadableStreamDefaultReader<Uint8Array>
-    ).cancel();
-    const memberChannelsBeforeRead = await (
-      await api.request("/api/v1/channels/", {
-        headers: { authorization: `Bearer ${channelUserToken}` },
-      })
-    ).json();
-    const memberChannelMessages = await (
-      await api.request(
-        `/api/v1/channels/${createdChannel.id}/messages?skip=0&limit=10`,
-        { headers: { authorization: `Bearer ${channelUserToken}` } },
-      )
-    ).json();
-    const memberReadState = await (
-      await api.request(`/api/v1/channels/${createdChannel.id}/messages/read`, {
-        method: "POST",
-        headers: { authorization: `Bearer ${channelUserToken}` },
-      })
-    ).json();
-    const memberChannelsAfterRead = await (
-      await api.request("/api/v1/channels/", {
-        headers: { authorization: `Bearer ${channelUserToken}` },
-      })
-    ).json();
-    const memberReply = await (
-      await api.request(`/api/v1/channels/${createdChannel.id}/messages/post`, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${channelUserToken}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          content: "Acknowledged.",
-          parent_id: postedChannelMessage.id,
-          reply_to_id: postedChannelMessage.id,
-        }),
-      })
-    ).json();
-    const threadMessagesBeforeDelete = await (
-      await api.request(
-        `/api/v1/channels/${createdChannel.id}/messages/${postedChannelMessage.id}/thread?skip=0&limit=10`,
-      )
-    ).json();
-    const channelMessagesAfterReply = await (
-      await api.request(`/api/v1/channels/${createdChannel.id}/messages`)
-    ).json();
-    const pinnedChannelMessage = await (
-      await api.request(
-        `/api/v1/channels/${createdChannel.id}/messages/${postedChannelMessage.id}/pin`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ is_pinned: true }),
-        },
-      )
-    ).json();
-    const pinnedChannelMessages = await (
-      await api.request(
-        `/api/v1/channels/${createdChannel.id}/messages/pinned?page=1`,
-      )
-    ).json();
-    const channelMessageData = await (
-      await api.request(
-        `/api/v1/channels/${createdChannel.id}/messages/${postedChannelMessage.id}/data`,
-      )
-    ).json();
-    const singleChannelMessage = await (
-      await api.request(
-        `/api/v1/channels/${createdChannel.id}/messages/${postedChannelMessage.id}`,
-      )
-    ).json();
-    const addedReaction = await (
-      await api.request(
-        `/api/v1/channels/${createdChannel.id}/messages/${postedChannelMessage.id}/reactions/add`,
-        {
-          method: "POST",
-          headers: {
-            authorization: `Bearer ${channelUserToken}`,
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({ name: "thumbs_up" }),
-        },
-      )
-    ).json();
-    const reactedChannelMessage = await (
-      await api.request(
-        `/api/v1/channels/${createdChannel.id}/messages/${postedChannelMessage.id}`,
-      )
-    ).json();
-    const removedReaction = await (
-      await api.request(
-        `/api/v1/channels/${createdChannel.id}/messages/${postedChannelMessage.id}/reactions/remove`,
-        {
-          method: "POST",
-          headers: {
-            authorization: `Bearer ${channelUserToken}`,
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({ name: "thumbs_up" }),
-        },
-      )
-    ).json();
-    const updatedChannelMessage = await (
-      await api.request(
-        `/api/v1/channels/${createdChannel.id}/messages/${postedChannelMessage.id}/update`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            content: "Release window moved to 15:00 UTC.",
-            data: { source: "test", edited: true },
-          }),
-        },
-      )
-    ).json();
-    const deletedThreadReply = await (
-      await api.request(
-        `/api/v1/channels/${createdChannel.id}/messages/${memberReply.id}/delete`,
-        {
-          method: "DELETE",
-          headers: { authorization: `Bearer ${channelUserToken}` },
-        },
-      )
-    ).json();
-    const threadMessagesAfterDelete = await (
-      await api.request(
-        `/api/v1/channels/${createdChannel.id}/messages/${postedChannelMessage.id}/thread`,
-      )
-    ).json();
-    const removedChannelMember = await (
-      await api.request(
-        `/api/v1/channels/${createdChannel.id}/update/members/remove`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ user_ids: ["user_openwebui_channel_api"] }),
-        },
-      )
-    ).json();
-    const channelMemberActive = await (
-      await api.request(
-        `/api/v1/channels/${createdChannel.id}/members/active`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ is_active: true }),
-        },
-      )
-    ).json();
-    const dmChannel = await (
-      await api.request("/api/v1/channels/users/user_openwebui_channel_api")
-    ).json();
-    const channelsAfterDm = await (
-      await api.request("/api/v1/channels/")
-    ).json();
-    const deletedChannel = await (
-      await api.request(`/api/v1/channels/${createdChannel.id}/delete`, {
-        method: "DELETE",
-      })
-    ).json();
-    const nativeMessagesResponse = await api.request(
-      `/api/v1/chats/${createdChat.id}/messages`,
-    );
-    const nativeMessages = await nativeMessagesResponse.json();
-    await api.request(`/api/v1/chats/${createdChat.id}/archive`, {
-      method: "POST",
-    });
-    const pinnedAfterArchive = await (
-      await api.request("/api/v1/chats/pinned")
-    ).json();
-    const archivedSummaries = await (
-      await api.request("/api/v1/chats/archived?page=1")
-    ).json();
-    const archivedChats = await (
-      await api.request("/api/v1/chats/all/archived")
-    ).json();
-    const deletedChildFolder = await (
-      await api.request(
-        `/api/v1/folders/${childFolder.id}?delete_contents=false`,
-        { method: "DELETE" },
-      )
-    ).json();
-
-    expect(createdChatResponse.status).toBe(200);
-    expect(createdChat.data).toBeUndefined();
-    expect(createdChat).toMatchObject({
-      user_id: "user_dev_admin",
-      title: "OpenWebUI imported chat",
-      folder_id: folder.id,
-      share_id: null,
-      archived: false,
-      pinned: true,
-      tasks: null,
-      summary: null,
-    });
-    expect(createdChat.chat.history.currentId).toBeDefined();
-    expect(importedPinnedStatus).toBe(true);
-    expect(importedPinnedList).toEqual([
-      expect.objectContaining({ id: createdChat.id }),
-    ]);
-    expect(
-      chatListWithoutPinned.map((chat: { id: string }) => chat.id),
-    ).not.toContain(createdChat.id);
-    expect(chatListWithPinned.map((chat: { id: string }) => chat.id)).toContain(
-      createdChat.id,
-    );
-    expect(unpinnedChat.pinned).toBe(false);
-    expect(unpinnedStatus).toBe(false);
-    expect(pinnedAfterUnpin).toEqual([]);
-    expect(repinnedChat.pinned).toBe(true);
-    expect(
-      pinnedFavorites.some(
-        (favorite) =>
-          favorite.userId === "user_dev_admin" &&
-          favorite.resourceType === "chat" &&
-          favorite.resourceId === createdChat.id,
-      ),
-    ).toBe(true);
-    expect(folderChats).toEqual([
-      expect.objectContaining({
-        id: createdChat.id,
-        folder_id: folder.id,
-      }),
-    ]);
-    expect(folderChatList).toEqual([
-      expect.objectContaining({
-        id: createdChat.id,
-        title: "OpenWebUI imported chat",
-        last_read_at: null,
-      }),
-    ]);
-    expect(movedChat.folder_id).toBe(childFolder.id);
-    expect(sourceFolderAfterMove).toEqual([]);
-    expect(searchResults).toEqual([
-      expect.objectContaining({ id: createdChat.id }),
-    ]);
-    expect(initialChatTags).toEqual([]);
-    expect(addedTags).toEqual([
-      expect.objectContaining({
-        id: "important_work",
-        name: "Important Work",
-        user_id: "user_dev_admin",
-        meta: null,
-      }),
-    ]);
-    expect(addedSecondTag.map((tag: { id: string }) => tag.id)).toEqual([
-      "important_work",
-      "research",
-    ]);
-    expect(tagsAfterDelete).toEqual([
-      expect.objectContaining({ id: "important_work" }),
-    ]);
-    expect(allTags).toEqual([
-      expect.objectContaining({
-        id: "important_work",
-        name: "Important Work",
-      }),
-    ]);
-    expect(taggedChats).toEqual([
-      expect.objectContaining({ id: createdChat.id }),
-    ]);
-    expect(createdChannelResponse.status).toBe(200);
-    expect(createdChannel).toMatchObject({
-      type: "group",
-      name: "team-room",
-      user_id: "user_dev_admin",
-      is_private: true,
-      meta: { icon: "lock" },
-      is_manager: true,
-      write_access: true,
-      user_count: 2,
-    });
-    expect(channelsAfterCreate).toEqual([
-      expect.objectContaining({
-        id: createdChannel.id,
-        name: "team-room",
-        unread_count: 0,
-      }),
-    ]);
-    expect(channelListAfterCreate).toEqual(channelsAfterCreate);
-    expect(fetchedChannel.users.map((user: { id: string }) => user.id)).toEqual(
-      ["user_dev_admin", "user_openwebui_channel_api"],
-    );
-    expect(channelMembers).toMatchObject({
-      total: 2,
-      users: [
-        expect.objectContaining({ id: "user_dev_admin" }),
-        expect.objectContaining({ id: "user_openwebui_channel_api" }),
-      ],
-    });
-    expect(updatedChannel).toMatchObject({
-      id: createdChannel.id,
-      name: "team-room-updated",
-      meta: { icon: "hash" },
-    });
-    expect(postedChannelMessage).toMatchObject({
-      channel_id: createdChannel.id,
-      user_id: "user_dev_admin",
-      content: "Release window is 14:00 UTC.",
-      data: { source: "test" },
-      reply_count: 0,
-      reactions: [],
-    });
-    expect(memberChannelsBeforeRead).toEqual([
-      expect.objectContaining({
-        id: createdChannel.id,
-        last_message_at: expect.any(Number),
-        unread_count: 1,
-      }),
-    ]);
-    expect(memberChannelMessages).toEqual([
-      expect.objectContaining({
-        id: postedChannelMessage.id,
-        user_id: "user_dev_admin",
-        user: expect.objectContaining({ id: "user_dev_admin" }),
-        content: "Release window is 14:00 UTC.",
-      }),
-    ]);
-    expect(memberReadState).toBe(true);
-    expect(memberChannelsAfterRead).toEqual([
-      expect.objectContaining({
-        id: createdChannel.id,
-        unread_count: 0,
-      }),
-    ]);
-    expect(memberReply).toMatchObject({
-      channel_id: createdChannel.id,
-      user_id: "user_openwebui_channel_api",
-      content: "Acknowledged.",
-      parent_id: postedChannelMessage.id,
-      reply_to_id: postedChannelMessage.id,
-      reply_to_message: expect.objectContaining({
-        id: postedChannelMessage.id,
-      }),
-    });
-    expect(threadMessagesBeforeDelete).toEqual([
-      expect.objectContaining({
-        id: memberReply.id,
-        parent_id: postedChannelMessage.id,
-      }),
-    ]);
-    expect(channelMessagesAfterReply).toEqual([
-      expect.objectContaining({
-        id: postedChannelMessage.id,
-        reply_count: 1,
-        latest_reply_at: expect.any(Number),
-      }),
-    ]);
-    expect(pinnedChannelMessage).toMatchObject({
-      id: postedChannelMessage.id,
-      is_pinned: true,
-      pinned_by: "user_dev_admin",
-      pinned_at: expect.any(Number),
-    });
-    expect(pinnedChannelMessages).toEqual([
-      expect.objectContaining({ id: postedChannelMessage.id, is_pinned: true }),
-    ]);
-    expect(channelMessageData).toEqual({ source: "test" });
-    expect(singleChannelMessage).toMatchObject({
-      id: postedChannelMessage.id,
-      content: "Release window is 14:00 UTC.",
-    });
-    expect(addedReaction).toBe(true);
-    expect(reactedChannelMessage.reactions).toEqual([
-      { user_id: "user_openwebui_channel_api", name: "thumbs_up" },
-    ]);
-    expect(removedReaction).toBe(true);
-    expect(updatedChannelMessage).toMatchObject({
-      id: postedChannelMessage.id,
-      content: "Release window moved to 15:00 UTC.",
-      data: { source: "test", edited: true },
-      reactions: [],
-    });
-    expect(deletedThreadReply).toBe(true);
-    expect(threadMessagesAfterDelete).toEqual([]);
-    expect(removedChannelMember).toBe(1);
-    expect(channelMemberActive).toBe(true);
-    expect(dmChannel).toMatchObject({
-      type: "dm",
-      user_count: 2,
-      user_ids: ["user_dev_admin", "user_openwebui_channel_api"],
-    });
-    expect(
-      channelsAfterDm.map((channel: { id: string }) => channel.id).sort(),
-    ).toEqual([createdChannel.id, dmChannel.id].sort());
-    expect(deletedChannel).toBe(true);
-    expect(
-      nativeMessages.data.map(
-        (message: { content: string }) => message.content,
-      ),
-    ).toEqual(["Summarize the workspace.", "The workspace is ready."]);
-    expect(archivedSummaries).toEqual([
-      expect.objectContaining({ id: createdChat.id }),
-    ]);
-    expect(pinnedAfterArchive).toEqual([]);
-    expect(archivedChats).toEqual([
-      expect.objectContaining({
-        id: createdChat.id,
-        archived: true,
-        pinned: true,
-        folder_id: childFolder.id,
-        meta: { tags: ["important_work"] },
-      }),
-    ]);
-    expect(deletedChildFolder.id).toBe(childFolder.id);
-  });
-
   it("serves raw OpenAI-compatible chat completions without a Romeo envelope", async () => {
     const repository = new InMemoryRomeoRepository();
     const provider = await repository.getProvider("provider_openai_compatible");
@@ -11864,15 +9281,16 @@ describe("Romeo API thin slice", () => {
   });
 
   it("syncs provider models into the base model registry", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: RequestInfo | URL) =>
-        String(input).endsWith("/api/tags")
-          ? Response.json({ models: [{ name: "llama3.2:latest" }] })
-          : Response.json({ capabilities: ["completion", "tools"] }),
-      ),
+    // Provider traffic uses the policy-checked transport, so the test injects
+    // the provider fetch rather than stubbing the global.
+    const providerFetch = vi.fn(async (input: RequestInfo | URL) =>
+      String(input).endsWith("/api/tags")
+        ? Response.json({ models: [{ name: "llama3.2:latest" }] })
+        : Response.json({ capabilities: ["completion", "tools"] }),
     );
-    const api = createRomeoApi(new InMemoryRomeoRepository());
+    const api = createRomeoApi(new InMemoryRomeoRepository(), {
+      providerFetch,
+    });
     try {
       const response = await api.request(
         "/api/v1/providers/provider_ollama/sync",
@@ -20036,7 +17454,7 @@ describe("Romeo chat history", () => {
     const repository = new InMemoryRomeoRepository();
     const api = await historyApi({ repository, bodies });
     const chatId = await createChat(api, "Injection");
-    // Reachable today: the openwebui import path persists an imported role verbatim.
+    // Simulates a system row that reached storage through imported history.
     await repository.createMessage({
       id: "msg_injected_system",
       chatId,

@@ -31,3 +31,4 @@ __pycache__/
 
 # Superpowers scratch (ledger is local recovery state)
 .superpowers/
+.romeo-dev-login.txt

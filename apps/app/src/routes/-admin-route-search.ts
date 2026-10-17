@@ -99,7 +99,6 @@ const adminTabs = new Set([
   "controls",
   "edge",
   "content",
-  "ga",
   "postgres",
   "jobs",
   "quotas",

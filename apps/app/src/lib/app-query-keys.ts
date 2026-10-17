@@ -90,18 +90,8 @@ export const contentPolicy = () => ["contentPolicy"] as const;
 export const contentPolicyVersions = () => ["contentPolicyVersions"] as const;
 export const contentPolicyDecisions = () => ["contentPolicyDecisions"] as const;
 export const contentPolicyApprovals = () => ["contentPolicyApprovals"] as const;
-export const dataConnectorCatalog = () => ["dataConnectorCatalog"] as const;
-export const dataConnectorSyncs = (connectorId?: string) =>
-  resourceKey("dataConnectorSyncs", connectorId);
-export const dataConnectors = (workspaceId?: string) =>
-  resourceKey("dataConnectors", workspaceId);
 export const dataExportPackages = () => ["dataExportPackages"] as const;
 export const dataRightsCoverage = () => ["dataRightsCoverage"] as const;
-export const delegatedOAuthConnections = (workspaceId?: string | null) =>
-  resourceKey("delegatedOAuthConnections", workspaceId);
-export const delegatedOAuthPosture = () => ["delegatedOAuthPosture"] as const;
-export const delegatedOAuthProviders = () =>
-  ["delegatedOAuthProviders"] as const;
 export const deviceAuthorizations = () => ["deviceAuthorizations"] as const;
 export const edgeSecurityPosture = () => ["edgeSecurityPosture"] as const;
 export const evalDashboard = (agentId?: string) =>
@@ -182,7 +172,6 @@ export const personalContent = (
       : (["personalContent", kind, workspaceId, page] as const);
 export const postgresOperationalPosture = () =>
   ["postgresOperationalPosture"] as const;
-export const postureGaEvidence = () => ["postureGaEvidence"] as const;
 export const promptMarketplace = (workspaceId?: string) =>
   resourceKey("promptMarketplace", workspaceId);
 export const promptTemplates = (

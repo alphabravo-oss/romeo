@@ -24,7 +24,6 @@ export interface WorkspaceExportDocument {
     chats: number;
     messages: number;
     knowledgeBases: number;
-    dataConnectors: number;
     workflows: number;
   };
   resources: {
@@ -35,12 +34,6 @@ export interface WorkspaceExportDocument {
     }>;
     chats: Array<{ id: string; archivedAt?: string; updatedAt: string }>;
     knowledgeBases: Array<{ id: string; createdAt: string; updatedAt: string }>;
-    dataConnectors: Array<{
-      id: string;
-      knowledgeBaseId: string;
-      status: string;
-      type: string;
-    }>;
     workflows: Array<{
       enabled: boolean;
       id: string;
@@ -211,11 +204,10 @@ export class WorkspaceService {
       input.subject,
       input.workspaceId,
     );
-    const [agents, chats, knowledgeBases, dataConnectors] = await Promise.all([
+    const [agents, chats, knowledgeBases] = await Promise.all([
       this.repository.listAgents(workspace.id),
       this.repository.listChats(workspace.id),
       this.repository.listKnowledgeBases(workspace.id),
-      this.repository.listDataConnectors(input.subject.orgId, workspace.id),
     ]);
 
     const messages = await Promise.all(
@@ -233,7 +225,6 @@ export class WorkspaceService {
           chats: chats.length,
           messages: messages.reduce((count, rows) => count + rows.length, 0),
           knowledgeBases: knowledgeBases.length,
-          dataConnectors: dataConnectors.length,
           workflows: 0,
         },
       },
@@ -248,7 +239,6 @@ export class WorkspaceService {
         chats: chats.length,
         messages: messages.reduce((count, rows) => count + rows.length, 0),
         knowledgeBases: knowledgeBases.length,
-        dataConnectors: dataConnectors.length,
         workflows: 0,
       },
       resources: {
@@ -270,12 +260,6 @@ export class WorkspaceService {
           id: knowledgeBase.id,
           createdAt: knowledgeBase.createdAt,
           updatedAt: knowledgeBase.updatedAt,
-        })),
-        dataConnectors: dataConnectors.map((connector) => ({
-          id: connector.id,
-          knowledgeBaseId: connector.knowledgeBaseId,
-          status: connector.status,
-          type: connector.type,
         })),
         workflows: [],
       },

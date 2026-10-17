@@ -276,7 +276,6 @@ export function isManagedSecretPurpose(
 ): value is ManagedSecretPurpose {
   return (
     value === "auth_provider_client_secret" ||
-    value === "data_connector_credential" ||
     value === "model_provider_credential" ||
     value === "tool_connector_credential"
   );

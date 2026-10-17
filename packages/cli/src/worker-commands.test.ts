@@ -10,14 +10,6 @@ describe("worker commands", () => {
     const generatedClient = {
       get: async ({ url }: { url: string }) => {
         requests.push(url);
-        if (url === "/data-connectors")
-          return envelope([
-            {
-              id: "connector_1",
-              status: "active",
-              type: "website",
-            },
-          ]);
         throw new Error(`Unexpected generated GET ${url}`);
       },
       post: async ({ url }: { url: string }) => {
@@ -50,8 +42,6 @@ describe("worker commands", () => {
             profiles: [],
             providerVoiceCount: 0,
           });
-        if (url === "/data-connectors/{connectorId}/sync")
-          return envelope({ id: "sync_1", status: "completed" });
         throw new Error(`Unexpected generated POST ${url}`);
       },
     } as never;
@@ -60,7 +50,6 @@ describe("worker commands", () => {
       "billing-entitlement-reconcile",
       "billing-lifecycle-enforce",
       "voice-catalog-sync",
-      "data-connector-sync",
       "browser-automation",
       "tool-dispatch",
     ]) {
@@ -99,8 +88,6 @@ describe("worker commands", () => {
       "/billing/entitlements/reconcile",
       "/billing/lifecycle/enforce",
       "/voices/sync",
-      "/data-connectors",
-      "/data-connectors/{connectorId}/sync",
     ]);
     expect(brokerRequests).toEqual([
       "https://api.example.test/api/v1/internal/worker-broker/browser_automation/claims",

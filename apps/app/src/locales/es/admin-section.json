@@ -38,7 +38,6 @@
   "adminNotificationsDescription": "Canales de entrega e historial de notificaciones.",
   "adminDeviceTokensDescription": "Credenciales de dispositivo de larga duración y sus ámbitos.",
   "adminAuthenticationDescription": "Habilita y configura proveedores de inicio de sesión único.",
-  "adminConnectedAppsDescription": "Proveedores OAuth delegados y conexiones activas.",
   "adminCapabilitiesDescription": "Controles por capas de organización y espacio de trabajo para capacidades gobernadas.",
   "adminComputeTrustDescription": "Previsualiza el sandbox, el runtime firmado, la procedencia de artefactos y las decisiones de confianza sin iniciar un trabajo."
 }

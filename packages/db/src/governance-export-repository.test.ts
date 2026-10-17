@@ -151,8 +151,6 @@ function jobRecord(
       fileObjects: 0,
       fileObjectBytesIncluded: 0,
       knowledgeSourceBytesIncluded: 0,
-      dataConnectors: 0,
-      dataConnectorSyncs: 0,
       workflows: 0,
       workflowRuns: 0,
       usageEvents: 0,

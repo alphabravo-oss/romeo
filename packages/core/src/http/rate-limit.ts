@@ -21,7 +21,6 @@ type RateLimitScope =
   | "auth"
   | "authenticated"
   | "credentialed"
-  | "public"
   | "webhook";
 
 interface RateLimitRule {
@@ -45,15 +44,6 @@ const exemptPaths = new Set([
   "/api/v1/health/object-storage",
   "/api/v1/docs",
   "/api/v1/openapi.json",
-]);
-
-const publicPaths = new Set([
-  "/api/config",
-  "/api/version",
-  "/api/version/updates",
-  "/api/v1/openwebui/config",
-  "/api/v1/openwebui/version",
-  "/api/v1/openwebui/version/updates",
 ]);
 
 /** Headroom for many principals behind one client address. See preAuthRule. */
@@ -166,21 +156,12 @@ function preAuthRule(
   }
   if (
     path.startsWith("/api/v1/auth/") ||
-    path === "/api/v1/delegated-oauth/callback" ||
     path === "/api/v1/device-authorizations/refresh"
   ) {
     return {
       key: `client:${client}`,
       limit: env.HTTP_RATE_LIMIT_AUTH_MAX,
       scope: "auth",
-      windowSeconds,
-    };
-  }
-  if (publicPaths.has(path)) {
-    return {
-      key: `client:${client}`,
-      limit: env.HTTP_RATE_LIMIT_PUBLIC_MAX,
-      scope: "public",
       windowSeconds,
     };
   }

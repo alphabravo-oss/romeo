@@ -583,6 +583,64 @@
         "tenant-purge": "dist/ci/background-job-claim-indexes-tenant-purge.json",
         "schema-contract": "dist/ci/background-job-claim-indexes-schema-contract.json"
       }
+    },
+    {
+      "file": "0045_drop_data_connectors.sql",
+      "sha256": "34eb9a775870b062b1549a37c40b62b47e997e13d2969846f81b04c66dd1f327",
+      "phase": "contract",
+      "changesExistingData": true,
+      "restartSafe": true,
+      "previousVersionCompatible": false,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "destructiveApproval": "Product owner approved removing the data connector and delegated OAuth features (alpha, never released); connector definitions, sync history, delegated OAuth token records, and data_connector resource grants are intentionally discarded.",
+      "repairStrategy": "Idempotent DROP TABLE IF EXISTS statements are restart-safe. Deleted connector configuration and encrypted delegated OAuth tokens cannot be recreated; restore the pre-migration backup and deploy the previous application version if the removal must be reverted. Knowledge sources previously imported by connectors are retained unchanged.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/drop-data-connectors-upgrade.json",
+        "restart": "dist/ci/drop-data-connectors-restart.json",
+        "rollback-or-forward-repair": "dist/ci/drop-data-connectors-repair.json",
+        "backup-restore": "dist/ci/drop-data-connectors-backup-restore.json",
+        "tenant-purge": "dist/ci/drop-data-connectors-tenant-purge.json",
+        "schema-contract": "dist/ci/drop-data-connectors-schema-contract.json"
+      }
+    },
+    {
+      "file": "0046_mfa_attempt_hardening.sql",
+      "sha256": "7aa731fd63af08559fef6ad6b19ff35744bbf3e1d60662091e6349f271c0a0fa",
+      "phase": "expand",
+      "changesExistingData": false,
+      "restartSafe": true,
+      "previousVersionCompatible": true,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "repairStrategy": "The three nullable or defaulted columns are additive and idempotent (ADD COLUMN IF NOT EXISTS). Previous applications ignore them; rolling back the application leaves MFA attempt counters and the last accepted TOTP step unused. If validation fails, keep the columns and roll forward with a corrected application; never drop them while a hardened application version is running.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/mfa-attempt-hardening-upgrade.json",
+        "restart": "dist/ci/mfa-attempt-hardening-restart.json",
+        "rollback-or-forward-repair": "dist/ci/mfa-attempt-hardening-repair.json",
+        "backup-restore": "dist/ci/mfa-attempt-hardening-backup-restore.json",
+        "tenant-purge": "dist/ci/mfa-attempt-hardening-tenant-purge.json",
+        "schema-contract": "dist/ci/mfa-attempt-hardening-schema-contract.json"
+      }
+    },
+    {
+      "file": "0047_sso_membership_source.sql",
+      "sha256": "96557ef1d6ed17ccb7eb69ed1aab044e3ad0061d749fa4a6c16e03e1e0630556",
+      "phase": "expand",
+      "changesExistingData": false,
+      "restartSafe": true,
+      "previousVersionCompatible": true,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "repairStrategy": "Retain the nullable source columns and partial indexes. Previous applications ignore them and keep writing NULL sources, which SSO reconciliation treats as non-SSO memberships and never revokes. Existing rows stay NULL, so memberships granted by SSO before this migration are not auto-revoked until an administrator removes them or SCIM deprovisions the user. If the indexes misbehave, drop only the affected index and roll forward with a corrected additive index; no membership rows are mutated.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/sso-membership-source-upgrade.json",
+        "restart": "dist/ci/sso-membership-source-restart.json",
+        "rollback-or-forward-repair": "dist/ci/sso-membership-source-repair.json",
+        "backup-restore": "dist/ci/sso-membership-source-backup-restore.json",
+        "tenant-purge": "dist/ci/sso-membership-source-tenant-purge.json",
+        "schema-contract": "dist/ci/sso-membership-source-schema-contract.json"
+      }
     }
   ],
   "requiredEvidence": [

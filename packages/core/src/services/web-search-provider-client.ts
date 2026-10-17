@@ -6,7 +6,7 @@ import { dnsPinnedFetch, type DnsPinnedFetch } from "./dns-pinned-fetch";
 import {
   assertConnectorHostAllowed,
   type WebsiteConnectorHostLookup,
-} from "./data-connector-executors";
+} from "./outbound-network-policy";
 import { withTelemetryFetch } from "./telemetry-context";
 import { ApiError } from "../errors";
 import {

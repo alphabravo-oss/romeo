@@ -5,7 +5,7 @@ import type {
 } from "../domain/entities";
 import { ApiError } from "../errors";
 import { writeAuditLog } from "./audit-log";
-import type { WebsiteConnectorHostAddress } from "./data-connector-network-policy";
+import type { WebsiteConnectorHostAddress } from "./outbound-network-policy";
 import type { DnsPinnedFetch } from "./dns-pinned-fetch";
 import type { DispatchToolOperationInput } from "./tool-operation-dispatch-types";
 import { validateToolOperationResponse } from "./tool-response-validation";

@@ -39,11 +39,39 @@ export function tokenKeyId(token: string): string | undefined {
   }
 }
 
+/**
+ * True when a JWT carries ID-token markers. A bearer credential must be an
+ * access token: ID tokens are minted for the client itself, so accepting
+ * them would let anything that obtained a user's ID token call the API.
+ * RFC 9068 access tokens (`typ: at+jwt`) are always treated as access tokens.
+ */
+export function unverifiedJwtIsIdToken(token: string): boolean {
+  const header = unverifiedJwtSegment(token, 0);
+  const typ = typeof header?.typ === "string" ? header.typ.toLowerCase() : "";
+  if (typ === "at+jwt" || typ === "application/at+jwt") return false;
+  const payload = unverifiedJwtSegment(token, 1);
+  if (payload === undefined) return false;
+  return (
+    payload.nonce !== undefined ||
+    payload.at_hash !== undefined ||
+    payload.c_hash !== undefined ||
+    payload.token_use === "id" ||
+    (typeof payload.typ === "string" && payload.typ.toLowerCase() === "id")
+  );
+}
+
 function unverifiedJwtPayload(
   token: string,
 ): Record<string, unknown> | undefined {
+  return unverifiedJwtSegment(token, 1);
+}
+
+function unverifiedJwtSegment(
+  token: string,
+  index: 0 | 1,
+): Record<string, unknown> | undefined {
   try {
-    const encoded = token.split(".")[1];
+    const encoded = token.split(".")[index];
     if (encoded === undefined) return undefined;
     const parsed = JSON.parse(Buffer.from(encoded, "base64url").toString());
     return typeof parsed === "object" && parsed !== null

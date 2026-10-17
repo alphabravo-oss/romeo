@@ -31,10 +31,7 @@ import { BillingService } from "./services/billing-service";
 import { ChannelService } from "./services/channel-service";
 import { ChatService } from "./services/chat-service";
 import { CollaborationService } from "./services/collaboration-service";
-import { DataConnectorService } from "./services/data-connector-service";
 import { dispatchApprovalRequestDigest } from "./services/tool-approval-integrity";
-import { DelegatedOAuthService } from "./services/delegated-oauth-service";
-import { DelegatedOAuthTokenVault } from "./services/delegated-oauth-token-vault";
 import { DeviceAuthorizationService } from "./services/device-authorization-service";
 import { DirectorySyncService } from "./services/directory-sync-service";
 import { EvalService } from "./services/eval-service";
@@ -55,7 +52,7 @@ import type {
 } from "./services/ldap-directory-client";
 import { ManagedSecretService } from "./services/managed-secret-service";
 import { oidcUserId } from "./services/oidc-client";
-import { OpenWebUiCompatibilityService } from "./services/openwebui-compatibility-service";
+import { ChannelStore } from "./services/channel-store";
 import { PromptTemplateService } from "./services/prompt-template-service";
 import { ProviderService } from "./services/provider-service";
 import { QuotaService } from "./services/quota-service";
@@ -346,70 +343,6 @@ describe("durable transaction boundaries", () => {
     ).toBe(false);
   });
 
-  it("rolls back delegated OAuth revocation when audit fails", async () => {
-    const repository = new InMemoryRomeoRepository();
-    const env = delegatedOAuthEnv();
-    const now = "2026-07-03T13:00:00.000Z";
-    const tokenVault = new DelegatedOAuthTokenVault(
-      env.DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY,
-    );
-    await repository.createDelegatedOAuthConnection({
-      id: "delegated_oauth_revoke_rollback",
-      orgId: "org_default",
-      workspaceId: "workspace_default",
-      userId: "user_dev_admin",
-      providerId: "github",
-      connectorType: "github",
-      providerAccountId: "provider-account-rollback",
-      providerAccountLogin: "provider-login-rollback",
-      scopes: ["repo"],
-      status: "active",
-      token: tokenVault.encrypt(
-        {
-          accessToken: "gho_revoke_rollback",
-          obtainedAt: now,
-          scopes: ["repo"],
-          tokenType: "bearer",
-        },
-        {
-          connectionId: "delegated_oauth_revoke_rollback",
-          connectorType: "github",
-          orgId: "org_default",
-          providerId: "github",
-          userId: "user_dev_admin",
-          workspaceId: "workspace_default",
-        },
-      ),
-      createdAt: now,
-      updatedAt: now,
-    });
-    const service = new DelegatedOAuthService(
-      failAuditRepository(repository, "delegated_oauth.revoke"),
-      env,
-      {
-        fetchImpl: async () => new Response(null, { status: 204 }),
-      },
-    );
-
-    await expect(
-      service.revoke({
-        subject: delegatedOAuthSubject(),
-        connectionId: "delegated_oauth_revoke_rollback",
-      }),
-    ).rejects.toThrow("Injected audit failure: delegated_oauth.revoke");
-
-    const connection = await repository.getDelegatedOAuthConnection(
-      "delegated_oauth_revoke_rollback",
-    );
-    expect(connection?.status).toBe("active");
-    expect(connection?.revokedAt).toBeUndefined();
-    expect(
-      (await repository.listAuditLogs("org_default")).some(
-        (log) => log.action === "delegated_oauth.revoke",
-      ),
-    ).toBe(false);
-  });
-
   it("rolls back quota bucket creation when audit fails", async () => {
     const repository = new InMemoryRomeoRepository();
     const service = new QuotaService(
@@ -683,98 +616,6 @@ describe("durable transaction boundaries", () => {
     expect(await repository.listUsageEvents("org_default")).toHaveLength(
       beforeUsageCount,
     );
-  });
-
-  it("rolls back data connector creation when audit fails", async () => {
-    const repository = new InMemoryRomeoRepository();
-    const service = new DataConnectorService(
-      failAuditRepository(repository, "data_connector.create"),
-      new KnowledgeService(repository),
-    );
-    const beforeConnectors = await repository.listDataConnectors(
-      "org_default",
-      "workspace_default",
-    );
-
-    await expect(
-      service.create({
-        subject: knowledgeAdminSubject(),
-        workspaceId: "workspace_default",
-        knowledgeBaseId: "kb_default",
-        type: "local_import",
-        name: "Rollback connector create",
-        config: { mode: "manual" },
-      }),
-    ).rejects.toThrow("Injected audit failure: data_connector.create");
-
-    expect(
-      await repository.listDataConnectors("org_default", "workspace_default"),
-    ).toHaveLength(beforeConnectors.length);
-    expect(
-      (await repository.listAuditLogs("org_default")).some(
-        (log) => log.action === "data_connector.create",
-      ),
-    ).toBe(false);
-  });
-
-  it("rolls back connector sync finalization when audit fails", async () => {
-    const repository = new InMemoryRomeoRepository();
-    const failingRepository = failAuditRepository(
-      repository,
-      "data_connector.sync",
-    );
-    const service = new DataConnectorService(
-      failingRepository,
-      new KnowledgeService(failingRepository),
-    );
-    const connector = await repository.createDataConnector({
-      id: "connector_sync_finalization_rollback",
-      orgId: "org_default",
-      workspaceId: "workspace_default",
-      knowledgeBaseId: "kb_default",
-      type: "local_import",
-      name: "Rollback local docs",
-      config: { mode: "manual" },
-      status: "active",
-      createdBy: "user_dev_admin",
-      createdAt: "2026-06-30T15:20:00.000Z",
-      updatedAt: "2026-06-30T15:20:00.000Z",
-    });
-
-    await expect(
-      service.sync({
-        subject: knowledgeAdminSubject(),
-        connectorId: connector.id,
-        items: [
-          {
-            fileName: "rollback.md",
-            mimeType: "text/markdown",
-            content: "Romeo connector sync finalization should stay retryable.",
-          },
-        ],
-      }),
-    ).rejects.toThrow("Injected audit failure: data_connector.sync");
-
-    const [sync] = await repository.listDataConnectorSyncs(
-      "org_default",
-      connector.id,
-    );
-    const updatedConnector = await repository.getDataConnector(connector.id);
-    expect(sync).toMatchObject({
-      status: "running",
-      sourceIds: [],
-      summary: { connectorType: "local_import" },
-    });
-    expect(sync?.completedAt).toBeUndefined();
-    expect(updatedConnector).toMatchObject({
-      config: { mode: "manual" },
-    });
-    expect(updatedConnector?.lastSyncAt).toBeUndefined();
-    expect(
-      (await repository.listAuditLogs("org_default")).some(
-        (log) => log.action === "data_connector.sync",
-      ),
-    ).toBe(false);
   });
 
   it("rolls back chat title updates when audit fails", async () => {
@@ -4227,18 +4068,6 @@ function toolBindingService(repository: RomeoRepository): ToolService {
   return new ToolService(repository, new RunEventSequencer());
 }
 
-function delegatedOAuthSubject(): AuthSubject {
-  return {
-    id: "user_dev_admin",
-    type: "user",
-    orgId: "org_default",
-    workspaceIds: ["workspace_default"],
-    groupIds: ["group_admins"],
-    scopes: ["knowledge:write"],
-    isAdmin: false,
-  };
-}
-
 function knowledgeAdminSubject(): AuthSubject {
   return {
     id: "user_dev_admin",
@@ -4300,10 +4129,7 @@ function channelAdminSubject(): AuthSubject {
 }
 
 function channelService(repository: RomeoRepository): ChannelService {
-  return new ChannelService(
-    repository,
-    new OpenWebUiCompatibilityService(repository),
-  );
+  return new ChannelService(repository, new ChannelStore(repository));
 }
 
 async function seedChannelPeer(
@@ -4568,17 +4394,6 @@ function localAuthEnv() {
 function managedSecretEnv() {
   return testEnv({
     MANAGED_SECRET_ENCRYPTION_KEY: "prod-managed-secret-key-32-bytes",
-    SESSION_SECRET: "prod-session-secret-32-bytes-long",
-    WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
-  });
-}
-
-function delegatedOAuthEnv() {
-  return testEnv({
-    APP_ORIGIN: "https://romeo.example",
-    DELEGATED_OAUTH_GITHUB_CLIENT_ID: "github-client-id",
-    DELEGATED_OAUTH_GITHUB_CLIENT_SECRET: "github-client-secret",
-    DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY: "delegated-oauth-test-token-key-32",
     SESSION_SECRET: "prod-session-secret-32-bytes-long",
     WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
   });

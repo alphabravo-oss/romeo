@@ -246,10 +246,6 @@ const forbiddenPatterns = [
         root,
         "packages/core/src/services/github-oauth2-auth-provider.ts",
       ),
-      resolve(
-        root,
-        "packages/core/src/services/delegated-oauth-github-provider.ts",
-      ),
     ],
     pattern:
       /api\.github\.com\/(?:user|applications)|\/user\/(?:emails|orgs|teams)/u,
@@ -278,42 +274,6 @@ const forbiddenPatterns = [
       resolve(root, "packages/api-client/src/resources/compatibility.ts"),
     ],
     pattern: /["'`]\/api\/v1\/(?:openai\/models|chat\/completions|embeddings)/u,
-  },
-  {
-    id: "handwritten_openwebui_system_client_endpoint",
-    files: [
-      resolve(root, "packages/api-client/src/resources/compatibility.ts"),
-    ],
-    pattern: /["'`]\/api\/v1\/(?:auths\/|openwebui\/(?:config|version))/u,
-  },
-  {
-    id: "handwritten_openwebui_chat_folder_client_endpoint",
-    files: [
-      resolve(root, "packages/api-client/src/resources/compatibility.ts"),
-      resolve(root, "packages/api-client/src/resources/openwebui-chats.ts"),
-      resolve(root, "packages/api-client/src/contracts/compatibility.ts"),
-    ],
-    pattern: /["'`]\/api\/v1\/(?:chats|folders)(?:\/|["'`])/u,
-  },
-  {
-    id: "duplicate_openwebui_chat_folder_core_contract",
-    files: [resolve(root, "packages/core/src/http/openapi/components.ts")],
-    pattern:
-      /(?:OpenWebUi(?:Chat|Folder|Tag)|["'`]\/(?:chats|folders)(?:\/|["'`]))/u,
-  },
-  {
-    id: "handwritten_openwebui_channel_client_endpoint",
-    files: [
-      resolve(root, "packages/api-client/src/resources/compatibility.ts"),
-      resolve(root, "packages/api-client/src/resources/openwebui-channels.ts"),
-      resolve(root, "packages/api-client/src/contracts/compatibility.ts"),
-    ],
-    pattern: /["'`]\/api\/v1\/channels(?:\/|["'`])/u,
-  },
-  {
-    id: "duplicate_openwebui_channel_core_contract",
-    files: [resolve(root, "packages/core/src/http/openapi/components.ts")],
-    pattern: /OpenWebUiChannel/u,
   },
   {
     id: "handwritten_openapi_document_route",
@@ -440,25 +400,11 @@ const requiredPatterns = [
     pattern: /from\s+["']stripe["']/u,
   },
   {
-    id: "github_connectors_use_official_sdk",
-    files: [
-      resolve(
-        root,
-        "packages/core/src/services/github-data-connector-executor.ts",
-      ),
-    ],
-    pattern: /from\s+["']octokit["']/u,
-  },
-  {
     id: "github_identity_uses_official_sdk",
     files: [
       resolve(
         root,
         "packages/core/src/services/github-oauth2-auth-provider.ts",
-      ),
-      resolve(
-        root,
-        "packages/core/src/services/delegated-oauth-github-provider.ts",
       ),
     ],
     pattern: /from\s+["']octokit["']/u,
@@ -472,13 +418,6 @@ const requiredPatterns = [
       ),
     ],
     pattern: /from\s+["']octokit["']/u,
-  },
-  {
-    id: "s3_connectors_use_official_sdk",
-    files: [
-      resolve(root, "packages/core/src/services/s3-data-connector-reader.ts"),
-    ],
-    pattern: /from\s+["']@aws-sdk\/client-s3["']/u,
   },
   {
     id: "s3_presigning_uses_official_sdk",
@@ -549,19 +488,6 @@ const requiredPatterns = [
     files: [
       resolve(root, "apps/app/src/features/sessions/mutations.ts"),
       resolve(root, "apps/app/src/features/sessions/queries.ts"),
-    ],
-    pattern: /from\s+["']@romeo\/api-client\/generated\/sdk["']/u,
-  },
-  {
-    id: "delegated_oauth_routes_use_authoritative_contracts",
-    files: [resolve(root, "packages/core/src/http/routes/delegated-oauth.ts")],
-    pattern: /from\s+["']@romeo\/contracts["']/u,
-  },
-  {
-    id: "delegated_oauth_browser_client_uses_generated_sdk",
-    files: [
-      resolve(root, "apps/app/src/features/delegated-oauth/mutations.ts"),
-      resolve(root, "apps/app/src/features/delegated-oauth/queries.ts"),
     ],
     pattern: /from\s+["']@romeo\/api-client\/generated\/sdk["']/u,
   },
@@ -798,7 +724,6 @@ const requiredPatterns = [
   {
     id: "operational_posture_routes_use_authoritative_contracts",
     files: [
-      resolve(root, "packages/core/src/http/routes/ga-evidence-posture.ts"),
       resolve(
         root,
         "packages/core/src/http/routes/postgres-operational-posture.ts",
@@ -811,7 +736,7 @@ const requiredPatterns = [
     files: [
       resolve(root, "apps/app/src/features/operational-posture/queries.ts"),
     ],
-    pattern: /operationalPostureGetGaEvidence/u,
+    pattern: /operationalPostureGetPostgres/u,
   },
   {
     id: "native_channel_routes_use_authoritative_contracts",
@@ -839,38 +764,6 @@ const requiredPatterns = [
     id: "openai_compatibility_generated_sdk_exports_operation",
     files: [resolve(root, "packages/api-client/src/generated/sdk/sdk.gen.ts")],
     pattern: /openAiCompatibilityCreateChatCompletion/u,
-  },
-  {
-    id: "openwebui_system_routes_use_authoritative_contracts",
-    files: [resolve(root, "packages/core/src/http/routes/openwebui.ts")],
-    pattern: /getOpenWebUiConfigRoute/u,
-  },
-  {
-    id: "openwebui_system_generated_sdk_exports_operation",
-    files: [resolve(root, "packages/api-client/src/generated/sdk/sdk.gen.ts")],
-    pattern: /openWebUiGetConfig/u,
-  },
-  {
-    id: "openwebui_chat_folder_routes_use_authoritative_contracts",
-    files: [resolve(root, "packages/core/src/http/routes/openwebui-chats.ts")],
-    pattern: /listOpenWebUiChatsRoute/u,
-  },
-  {
-    id: "openwebui_chat_folder_generated_sdk_exports_operation",
-    files: [resolve(root, "packages/api-client/src/generated/sdk/sdk.gen.ts")],
-    pattern: /openWebUiListChats/u,
-  },
-  {
-    id: "openwebui_channel_routes_use_authoritative_contracts",
-    files: [
-      resolve(root, "packages/core/src/http/routes/openwebui-channels.ts"),
-    ],
-    pattern: /listOpenWebUiChannelsRoute/u,
-  },
-  {
-    id: "openwebui_channel_generated_sdk_exports_operation",
-    files: [resolve(root, "packages/api-client/src/generated/sdk/sdk.gen.ts")],
-    pattern: /openWebUiListChannels/u,
   },
 ];
 const requiredFailures = requiredPatterns.flatMap(({ id, files, pattern }) =>

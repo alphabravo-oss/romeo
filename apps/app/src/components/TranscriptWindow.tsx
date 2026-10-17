@@ -76,6 +76,7 @@ export function shouldVirtualizeTranscript(input: {
 
 export function TranscriptWindow<TItem extends TranscriptItem>({
   accessibleDescription,
+  busy = false,
   estimateSize,
   feedLabel,
   getScrollElement,
@@ -87,6 +88,8 @@ export function TranscriptWindow<TItem extends TranscriptItem>({
   onVirtualizationChange,
 }: {
   accessibleDescription: string;
+  /** True while a response streams in, so assistive tech waits for it. */
+  busy?: boolean;
   estimateSize?: (index: number) => number;
   feedLabel: string;
   getScrollElement: () => HTMLDivElement | null;
@@ -293,6 +296,7 @@ export function TranscriptWindow<TItem extends TranscriptItem>({
         </div>
       ) : null}
       <div
+        aria-busy={busy}
         aria-label={feedLabel}
         className={`rm-message-list${virtualized ? " virtualized" : ""}`}
         data-message-count={items.length}

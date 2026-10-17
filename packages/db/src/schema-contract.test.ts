@@ -23,9 +23,6 @@ import {
   chatTagAssignments,
   chatTags,
   chats,
-  dataConnectors,
-  dataConnectorSyncs,
-  delegatedOAuthConnections,
   deviceAuthorizations,
   evalResultHumanRatings,
   groupMemberships,
@@ -250,6 +247,7 @@ describe("durable baseline schema contract", () => {
       "org_id",
       "group_id",
       "user_id",
+      "source",
       "created_at",
     ]);
   });
@@ -381,46 +379,6 @@ describe("durable baseline schema contract", () => {
     );
     expect(uniqueIndexNames(toolOperations)).toContain(
       "tool_operations_connector_operation_idx",
-    );
-  });
-
-  it("keeps data connector list, sync, and scheduling indexes explicit", () => {
-    expect(indexNames(dataConnectors)).toEqual(
-      expect.arrayContaining([
-        "data_connectors_workspace_created_idx",
-        "data_connectors_kb_idx",
-        "data_connectors_due_sync_lease_idx",
-      ]),
-    );
-    expect(uniqueIndexNames(dataConnectors)).toContain(
-      "data_connectors_workspace_name_idx",
-    );
-    expect(indexNames(dataConnectorSyncs)).toEqual(
-      expect.arrayContaining([
-        "data_connector_syncs_org_started_idx",
-        "data_connector_syncs_connector_started_idx",
-      ]),
-    );
-  });
-
-  it("keeps delegated OAuth connection ownership and provider-account indexes explicit", () => {
-    expect(columnNames(delegatedOAuthConnections)).toEqual(
-      expect.arrayContaining([
-        "provider_account_id",
-        "status",
-        "token",
-        "revoked_at",
-        "updated_at",
-      ]),
-    );
-    expect(indexNames(delegatedOAuthConnections)).toEqual(
-      expect.arrayContaining([
-        "delegated_oauth_connections_user_updated_idx",
-        "delegated_oauth_connections_status_idx",
-      ]),
-    );
-    expect(uniqueIndexNames(delegatedOAuthConnections)).toContain(
-      "delegated_oauth_connections_provider_account_idx",
     );
   });
 
@@ -758,14 +716,6 @@ describe("durable baseline schema contract", () => {
           "background_jobs_org_status_id_idx",
           "background_jobs_org_type_id_idx",
           "background_jobs_search_trgm_idx",
-        ],
-      ],
-      [
-        dataConnectorSyncs,
-        [
-          "data_connector_syncs_org_connector_started_id_idx",
-          "data_connector_syncs_org_connector_status_id_idx",
-          "data_connector_syncs_search_trgm_idx",
         ],
       ],
       [

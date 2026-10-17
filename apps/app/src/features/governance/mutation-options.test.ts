@@ -62,8 +62,6 @@ const exportCounts = {
   backgroundJobs: 0,
   chatComments: 0,
   chats: 0,
-  dataConnectorSyncs: 0,
-  dataConnectors: 0,
   fileObjectBytesIncluded: 0,
   fileObjects: 0,
   knowledgeBases: 0,

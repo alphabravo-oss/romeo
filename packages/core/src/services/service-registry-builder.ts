@@ -30,15 +30,11 @@ import { PolicyApprovalService } from "./policy-approval-service";
 import type { CapabilityService } from "./capability-resolver";
 import type { CapabilityPlatformPolicy } from "./capability-platform-policy";
 import type { OrganizationCapabilityFlagService } from "./organization-capability-flag-service";
-import type { DataConnectorExecutor } from "./data-connector-executors";
-import { DataConnectorService } from "./data-connector-service";
-import type { DelegatedOAuthService } from "./delegated-oauth-service";
 import type { DirectorySyncService } from "./directory-sync-service";
 import { DeviceAuthorizationService } from "./device-authorization-service";
 import { EdgeSecurityService } from "./edge-security-service";
 import { EvalService } from "./eval-service";
 import type { FileService } from "./file-service";
-import { GaEvidencePostureService } from "./ga-evidence-posture-service";
 import { GovernanceService } from "./governance-service";
 import { GovernanceExportWorker } from "./governance-export-worker";
 import { GroupService } from "./group-service";
@@ -60,7 +56,9 @@ import { LdapAuthService } from "./ldap-auth-service";
 import { LocalAuthService } from "./local-auth-service";
 import type { ManagedSecretService } from "./managed-secret-service";
 import type { NotificationDeliverySender } from "./notification-delivery";
+import { createNotificationDestinationGuard } from "./notification-delivery-factory";
 import { NotificationService } from "./notification-service";
+import { lookupNetworkHost } from "./outbound-network-policy";
 import { OAuth2PkceService } from "./oauth2-pkce-service";
 import { OidcPkceService } from "./oidc-pkce-service";
 import type { OidcRuntimeCache } from "./oidc-client";
@@ -69,11 +67,12 @@ import { OpenAiChatCompletionsService } from "./openai-chat-completions-service"
 import { OpenAiEmbeddingsService } from "./openai-embeddings-service";
 import { OpenAiModelsService } from "./openai-models-service";
 import { derivePageCursorSecret } from "./page-cursor";
-import type { OpenWebUiCompatibilityService } from "./openwebui-compatibility-service";
+import type { ChannelStore } from "./channel-store";
 import { PostgresOperationalPostureService } from "./postgres-operational-posture-service";
 import { PromptTemplateService } from "./prompt-template-service";
 import { ProviderService } from "./provider-service";
 import { ProviderCapabilityReportService } from "./provider-capability-report-service";
+import type { ProviderNetworkPolicy } from "./provider-network-policy";
 import type { createQdrantKnowledgeVectorStore } from "./qdrant-knowledge-vector-store";
 import type { QuotaCoordinator } from "./quota-coordination";
 import { QuotaService } from "./quota-service";
@@ -103,7 +102,6 @@ import type { WebSearchService } from "./web-search-service";
 import { WorkspaceContentService } from "./workspace-content-service";
 import { WorkspaceService } from "./workspace-service";
 import type { CreateServicesOptions, RomeoServices } from "./index";
-import { dataConnectorRuntimePosture } from "./service-registry-data-connector-posture";
 
 interface ServiceRegistryInput {
   abuseControls: AbuseControlService;
@@ -115,8 +113,6 @@ interface ServiceRegistryInput {
   capabilityPlatformPolicy: CapabilityPlatformPolicy;
   chatEvents: ChatEventService;
   chats: ChatService;
-  dataConnectorExecutor: DataConnectorExecutor;
-  delegatedOAuth: DelegatedOAuthService;
   directorySync: DirectorySyncService;
   env: RomeoEnv;
   files: FileService;
@@ -128,9 +124,10 @@ interface ServiceRegistryInput {
   oidcRuntimeCache: OidcRuntimeCache;
   objectStore: ObjectStore;
   oidc: OidcAuthenticator;
-  openWebUiCompatibility: OpenWebUiCompatibilityService;
+  channelStore: ChannelStore;
   options: CreateServicesOptions;
   providerCircuitBreaker: ProviderCircuitBreaker;
+  providerNetworkPolicy: ProviderNetworkPolicy;
   quotaCoordinator: QuotaCoordinator;
   repository: RomeoRepository;
   runs: RunService;
@@ -158,8 +155,6 @@ export function buildServiceRegistry(
     capabilityPlatformPolicy,
     chatEvents,
     chats,
-    dataConnectorExecutor,
-    delegatedOAuth,
     directorySync,
     env,
     files,
@@ -171,9 +166,10 @@ export function buildServiceRegistry(
     oidcRuntimeCache,
     objectStore,
     oidc,
-    openWebUiCompatibility,
+    channelStore,
     options,
     providerCircuitBreaker,
+    providerNetworkPolicy,
     quotaCoordinator,
     repository,
     runs,
@@ -243,7 +239,7 @@ export function buildServiceRegistry(
     browserAutomation,
     chatEvents,
     chatExperience: new ChatExperienceService(repository),
-    channels: new ChannelService(repository, openWebUiCompatibility),
+    channels: new ChannelService(repository, channelStore),
     capabilities,
     capabilityFlags,
     chats,
@@ -261,13 +257,6 @@ export function buildServiceRegistry(
       resolve: (resolution) => runs.resolveContentPolicyApproval(resolution),
       expireDue: (subject) => runs.expireContentPolicyApprovals(subject),
     }),
-    dataConnectors: new DataConnectorService(
-      repository,
-      knowledge,
-      dataConnectorExecutor,
-      dataConnectorRuntimePosture(env),
-    ),
-    delegatedOAuth,
     deployment: {
       tenancyMode: env.TENANCY_MODE,
       billingEnabled: env.BILLING_ENABLED,
@@ -288,10 +277,8 @@ export function buildServiceRegistry(
         : { providerFetch: options.providerFetch }),
     }),
     files,
-    gaEvidencePosture: new GaEvidencePostureService(env),
     governance: new GovernanceService(repository, objectStore, {
       capabilities,
-      env,
       scimEnabled: env.SCIM_ENABLED,
       deleteKnowledgeSource: (value) => knowledge.deleteSource(value),
     }),
@@ -340,6 +327,12 @@ export function buildServiceRegistry(
       repository,
       notificationDelivery,
       secretResolver,
+      createNotificationDestinationGuard(
+        env,
+        options.webhookFetch === undefined
+          ? { hostLookup: lookupNetworkHost }
+          : {},
+      ),
     ),
     oidc,
     oidcPkce: new OidcPkceService(
@@ -360,9 +353,9 @@ export function buildServiceRegistry(
       env,
       authProviderSettings,
       secretResolver,
-      options.delegatedOAuthFetch === undefined
+      options.oauth2ProviderFetch === undefined
         ? {}
-        : { fetchImpl: options.delegatedOAuthFetch },
+        : { fetchImpl: options.oauth2ProviderFetch },
     ),
     samlAuth: new SamlAuthService(
       repository,
@@ -405,9 +398,9 @@ export function buildServiceRegistry(
         : { fetchImpl: options.embeddingFetch }),
     }),
     openAiModels: new OpenAiModelsService(repository),
-    openWebUiCompatibility,
     postgresOperationalPosture: new PostgresOperationalPostureService(env),
     providers: new ProviderService(repository, {
+      networkPolicy: providerNetworkPolicy,
       secretResolver,
       catalogSync: {
         enabled:
@@ -424,12 +417,7 @@ export function buildServiceRegistry(
     prompts: new PromptTemplateService(repository),
     quotas: new QuotaService(repository, quotaCoordinator),
     ragPolicy: new RagPolicyService(repository),
-    ragPosture: new RagPostureService(
-      repository,
-      activeVectorStoreDeployment,
-      env.PGVECTOR_PHYSICAL_ISOLATION_EVIDENCE_PATH,
-      env.QDRANT_LIVE_EVIDENCE_PATH,
-    ),
+    ragPosture: new RagPostureService(repository, activeVectorStoreDeployment),
     readiness: new ReadinessService(
       repository,
       env,

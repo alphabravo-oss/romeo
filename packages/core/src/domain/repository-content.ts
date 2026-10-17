@@ -1,9 +1,4 @@
 import type {
-  DelegatedOAuthConnection,
-  DelegatedOAuthProviderId,
-} from "./delegated-oauth";
-import type { DataConnectorType } from "./data-connectors";
-import type {
   ClaimWorkLeaseInput,
   FinishWorkLeaseInput,
   RenewWorkLeaseInput,
@@ -15,8 +10,6 @@ import type {
   ChatTagAssignment,
   CollaborationChannel,
   CollaborationChannelMember,
-  DataConnector,
-  DataConnectorSync,
   FileObject,
   KnowledgeBase,
   KnowledgeChunk,
@@ -42,12 +35,7 @@ import type {
   RenewQueuedChatTurnLeaseInput,
   MessagePageQueryResult,
   ChatMessageSearchQueryResult,
-  RomeoRepository,
 } from "./repository";
-import type {
-  RuntimeKeyUsageCounts,
-  RuntimeKeyUsageQuery,
-} from "./runtime-key-usage";
 
 export interface RepositoryContentCapability {
   listChats(workspaceId: string): Promise<Chat[]>;
@@ -280,60 +268,6 @@ export interface RepositoryContentCapability {
     embeddings: KnowledgeChunkEmbedding[],
   ): Promise<KnowledgeChunkEmbedding[]>;
   deleteKnowledgeChunkEmbeddingsForSource(sourceId: string): Promise<void>;
-  listDataConnectors(
-    orgId: string,
-    workspaceId?: string,
-  ): Promise<DataConnector[]>;
-  getDataConnector(connectorId: string): Promise<DataConnector | undefined>;
-  createDataConnector(connector: DataConnector): Promise<DataConnector>;
-  updateDataConnector(connector: DataConnector): Promise<DataConnector>;
-  claimDataConnectorSync(
-    input: ClaimWorkLeaseInput & { connectorId?: string; orgId: string },
-  ): Promise<DataConnector | undefined>;
-  renewDataConnectorSyncLease(
-    input: RenewWorkLeaseInput & { connectorId: string },
-  ): Promise<DataConnector | undefined>;
-  finishDataConnectorSync(
-    input: FinishWorkLeaseInput & {
-      connector: DataConnector;
-      sync: DataConnectorSync;
-    },
-  ): Promise<DataConnectorSync | undefined>;
-  listDataConnectorSyncs(
-    orgId: string,
-    connectorId?: string,
-  ): Promise<DataConnectorSync[]>;
-  createDataConnectorSync(sync: DataConnectorSync): Promise<DataConnectorSync>;
-  updateDataConnectorSync(sync: DataConnectorSync): Promise<DataConnectorSync>;
-  listDelegatedOAuthConnections(
-    orgId: string,
-    workspaceId?: string,
-    userId?: string,
-  ): Promise<DelegatedOAuthConnection[]>;
-  countDelegatedOAuthTokenKeyUsage(
-    input: RuntimeKeyUsageQuery,
-  ): Promise<RuntimeKeyUsageCounts>;
-  getDelegatedOAuthConnection(
-    connectionId: string,
-  ): Promise<DelegatedOAuthConnection | undefined>;
-  getDelegatedOAuthConnectionByProviderAccount(input: {
-    connectorType: DataConnectorType;
-    orgId: string;
-    providerAccountId: string;
-    providerId: DelegatedOAuthProviderId;
-    userId: string;
-    workspaceId: string;
-  }): Promise<DelegatedOAuthConnection | undefined>;
-  createDelegatedOAuthConnection(
-    connection: DelegatedOAuthConnection,
-  ): Promise<DelegatedOAuthConnection>;
-  updateDelegatedOAuthConnection(
-    connection: DelegatedOAuthConnection,
-  ): Promise<DelegatedOAuthConnection>;
-  withDelegatedOAuthConnectionRefreshLock<T>(
-    connectionId: string,
-    work: (repository: RomeoRepository) => Promise<T>,
-  ): Promise<T>;
   listVoiceProfiles(orgId: string): Promise<VoiceProfile[]>;
   getVoiceProfile(voiceProfileId: string): Promise<VoiceProfile | undefined>;
   createVoiceProfile(voiceProfile: VoiceProfile): Promise<VoiceProfile>;

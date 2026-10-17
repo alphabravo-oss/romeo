@@ -46,6 +46,16 @@ export interface GroupMembership {
   createdAt: string;
 }
 
+/**
+ * Provenance recorded alongside a group membership or resource grant. `source`
+ * names the identity-provider mapping that created the row (for example
+ * `sso:oidc:<issuer>`); omitted for manual, SCIM, and directory-sync rows.
+ * Provenance is internal and never returned on read models.
+ */
+export interface MembershipSourceOptions {
+  source?: string;
+}
+
 export interface ApiKey {
   id: string;
   orgId: string;
@@ -89,6 +99,8 @@ export interface LocalPasswordCredential {
   emailNormalized: string;
   passwordHash: string;
   failedAttemptCount: number;
+  /** Consecutive failed MFA verifications; reset only by a successful MFA. */
+  mfaFailedAttemptCount?: number;
   lockedUntil?: string;
   passwordUpdatedAt: string;
   createdAt: string;
@@ -108,6 +120,8 @@ export interface LocalMfaFactor {
   confirmedAt?: string;
   disabledAt?: string;
   lastUsedAt?: string;
+  /** Last accepted TOTP time-step; codes at or before it are replays. */
+  lastTotpStep?: number;
 }
 
 export interface SamlAuthRequest {
@@ -127,5 +141,7 @@ export interface LocalMfaChallenge {
   userId: string;
   expiresAt: string;
   consumedAt?: string;
+  /** Verification attempts served by this challenge. */
+  attemptCount?: number;
   createdAt: string;
 }

@@ -1,4 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
+  index,
   pgTable,
   primaryKey,
   text,
@@ -102,12 +104,18 @@ export const groupMemberships = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id),
+    // Identity-provider mapping that created this membership; null for
+    // manual, SCIM, directory-sync, and pre-0047 memberships.
+    source: text("source"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => ({
     pk: primaryKey({ columns: [table.groupId, table.userId] }),
+    groupMembershipsSourceIdx: index("group_memberships_source_idx")
+      .on(table.orgId, table.userId, table.source)
+      .where(sql`${table.source} is not null`),
   }),
 );
 

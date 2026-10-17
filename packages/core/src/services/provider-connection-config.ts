@@ -7,6 +7,10 @@ import {
   type ProviderAuthStrategy,
 } from "./provider-adapter-contracts";
 import {
+  providerBaseUrlPermitted,
+  type ProviderNetworkPolicy,
+} from "./provider-network-policy";
+import {
   validateRegionalEndpoint,
   type TenantResidency,
 } from "./provider-endpoint-policy";
@@ -16,6 +20,7 @@ const RAW_SECRET_PATTERN = /^(sk-|rk-|Bearer\s|api[_-]?key=)/iu;
 
 export type ProviderConnectionConfigDenial =
   | "provider_auth_unsupported"
+  | "provider_base_url_blocked"
   | "provider_credential_required"
   | "provider_field_invalid"
   | "provider_raw_secret_forbidden"
@@ -33,6 +38,8 @@ export interface ProviderConnectionConfigInput {
   kind: ProviderKind;
   modelIds?: string[];
   name: string;
+  /** Operator provider egress policy; omitted only by policy-free unit callers. */
+  networkPolicy?: ProviderNetworkPolicy | undefined;
   project?: string;
   region?: string;
   target?: string;
@@ -69,6 +76,13 @@ export function validateProviderConnectionConfig(
   }
   if (baseUrl.protocol !== "http:" && baseUrl.protocol !== "https:")
     return { code: "provider_field_invalid", outcome: "denied" };
+  if (baseUrl.username.length > 0 || baseUrl.password.length > 0)
+    return { code: "provider_field_invalid", outcome: "denied" };
+  if (
+    input.networkPolicy !== undefined &&
+    !providerBaseUrlPermitted(input.networkPolicy, baseUrl)
+  )
+    return { code: "provider_base_url_blocked", outcome: "denied" };
   if (input.modelIds !== undefined && input.modelIds.length > 2_000)
     return { code: "provider_field_invalid", outcome: "denied" };
 

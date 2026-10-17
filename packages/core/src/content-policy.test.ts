@@ -15,7 +15,8 @@ import {
 } from "./services/content-policy-service";
 import { OpenAiEmbeddingsService } from "./services/openai-embeddings-service";
 import { OpenAiChatCompletionsService } from "./services/openai-chat-completions-service";
-import { OpenWebUiCompatibilityService } from "./services/openwebui-compatibility-service";
+import { ChannelService } from "./services/channel-service";
+import { ChannelStore } from "./services/channel-store";
 import { RunEventSequencer } from "./services/run-event-sequencer";
 import { persistTerminalRun } from "./services/run-terminal-effects";
 import { reasoningPolicySettingKey } from "./services/reasoning-capability-policy";
@@ -257,7 +258,7 @@ describe("content policy", () => {
     expect(await repository.listSystemSettings("org_default")).toEqual([]);
   });
 
-  it("governs chat-transfer, OpenWebUI import, and channel content before persistence", async () => {
+  it("governs chat-transfer and channel content before persistence", async () => {
     const repository = new InMemoryRomeoRepository();
     const policy = new ContentPolicyService(repository);
     await policy.update({
@@ -265,7 +266,10 @@ describe("content policy", () => {
       detectors: { email_address: "redact", api_token: "block" },
     });
     const chats = new ChatService(repository);
-    const compatibility = new OpenWebUiCompatibilityService(repository);
+    const channels = new ChannelService(
+      repository,
+      new ChannelStore(repository),
+    );
 
     const chatsBeforeBlockedImport =
       await repository.listChats("workspace_default");
@@ -290,27 +294,15 @@ describe("content policy", () => {
       subject: seededSubject,
       messages: [{ role: "user", content: "transfer-secret@example.com" }],
     });
-    const imported = await compatibility.createChat(seededSubject, {
-      chat: {
-        title: "Governed import",
-        messages: [{ role: "user", content: "openwebui-secret@example.com" }],
-      },
-    });
-    const channel = await compatibility.createChannel(seededSubject, {
+    const channel = await channels.create(seededSubject, {
       name: "Governed channel",
     });
-    const posted = await compatibility.postChannelMessage(
-      seededSubject,
-      channel.id,
-      { content: "channel-secret@example.com" },
-    );
-    const persisted = [
-      ...(await repository.listMessages(transferred.id)),
-      ...(await repository.listMessages(imported.id)),
-    ];
+    const posted = await channels.postMessage(seededSubject, channel.id, {
+      content: "channel-secret@example.com",
+    });
+    const persisted = await repository.listMessages(transferred.id);
 
     expect(persisted.map((message) => message.content)).toEqual([
-      "[REDACTED:EMAIL_ADDRESS]",
       "[REDACTED:EMAIL_ADDRESS]",
     ]);
     expect(posted.content).toBe("[REDACTED:EMAIL_ADDRESS]");
@@ -325,7 +317,6 @@ describe("content policy", () => {
     for (const sentinel of [
       "sk-abcdefghijklmnopqrstuvwxyz123456",
       "transfer-secret@example.com",
-      "openwebui-secret@example.com",
       "channel-secret@example.com",
     ]) {
       expect(repositoryState).not.toContain(sentinel);

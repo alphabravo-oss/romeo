@@ -15,6 +15,22 @@ export const notificationTypes: NotificationType[] = [
 export const notificationDeliveryChannelTypes: NotificationDeliveryChannelType[] =
   ["email", "mobile_push", "pagerduty", "slack", "teams", "webhook"];
 
+/**
+ * Destinations the Slack and Teams adapters are built for. Personal channels
+ * are end-user input, so with no organization allowlist these hosts are the
+ * only ones a Slack or Teams channel may target; an organization allowlist
+ * replaces them (for example, for a Slack-compatible on-premises endpoint).
+ */
+export const defaultSlackWebhookHosts: readonly string[] = [
+  "hooks.slack.com",
+  "hooks.slack-gov.com",
+];
+export const defaultTeamsWebhookHosts: readonly string[] = [
+  "*.webhook.office.com",
+  "outlook.office.com",
+  "outlook.office365.com",
+];
+
 export interface NotificationPolicy {
   deliveryEnabled: boolean;
   allowedChannelTypes: NotificationDeliveryChannelType[];
@@ -135,9 +151,15 @@ export function notificationChannelPolicyBlockReason(input: {
     const host = urlHost(input.channel.config.url);
     const allowedHosts =
       input.channel.type === "slack"
-        ? input.policy.allowedSlackHosts
+        ? withDefaultHosts(
+            input.policy.allowedSlackHosts,
+            defaultSlackWebhookHosts,
+          )
         : input.channel.type === "teams"
-          ? input.policy.allowedTeamsHosts
+          ? withDefaultHosts(
+              input.policy.allowedTeamsHosts,
+              defaultTeamsWebhookHosts,
+            )
           : input.policy.allowedWebhookHosts;
     if (
       allowedHosts.length > 0 &&
@@ -225,7 +247,17 @@ function urlHost(value: unknown): string | undefined {
   }
 }
 
-function hostMatchesAllowlist(host: string, allowlist: string[]): boolean {
+function withDefaultHosts(
+  configured: readonly string[],
+  defaults: readonly string[],
+): readonly string[] {
+  return configured.length > 0 ? configured : defaults;
+}
+
+function hostMatchesAllowlist(
+  host: string,
+  allowlist: readonly string[],
+): boolean {
   return allowlist.some((pattern) => {
     if (pattern.startsWith("*.")) {
       const suffix = pattern.slice(1);

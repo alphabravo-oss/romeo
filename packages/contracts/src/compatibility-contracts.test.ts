@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  DataConnectorTypeSchema,
   DeviceAuthorizationSchema,
   FileLifecycleStatusSchema,
   KnowledgeSourceSchema,
@@ -12,11 +11,6 @@ import { UpdateRetentionPolicyRequestSchema } from "./governance-data-schemas";
 import { RunEventWireSchema } from "./run-event-contracts";
 
 describe("additive public API compatibility", () => {
-  it("continues parsing legacy connector types without advertising executors", () => {
-    for (const type of ["confluence", "jira", "linear", "notion", "slack"])
-      expect(DataConnectorTypeSchema.safeParse(type).success).toBe(true);
-  });
-
   it("keeps newly recommended billing and retention fields optional", () => {
     expect(
       SyncExternalBillingEventSchema.safeParse({

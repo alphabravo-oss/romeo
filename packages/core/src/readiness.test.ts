@@ -1,7 +1,4 @@
 import { testEnv } from "./test-support/env";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MemoryObjectStore, type ObjectStore } from "@romeo/storage";
 
@@ -87,74 +84,6 @@ describe("readiness API", () => {
         (check: { status: string }) => check.status === "pass",
       ),
     ).toBe(true);
-  });
-
-  it("fails readiness when mounted GA evidence is blocked without leaking mounted paths", async () => {
-    const checklistPath = writeGaChecklistEvidence({
-      status: "blocked",
-      summary: {
-        total: 2,
-        satisfied: 1,
-        excepted: 0,
-        blocked: 1,
-        environmentRequired: 1,
-        securityCriticalBlocked: 1,
-      },
-      gates: [
-        {
-          id: "phase21.kubernetes_networkpolicy_enforcement",
-          phase: "21",
-          title: "Kubernetes NetworkPolicy CNI enforcement",
-          status: "blocked",
-          requiredForGa: true,
-          exceptionAllowed: false,
-          environmentRequired: true,
-          securityCritical: true,
-          evidence: [
-            {
-              path: "/tmp/RAW-GA-EVIDENCE-PATH/networkpolicy.json",
-              status: "missing",
-              failures: ["RAW-CNI-FAILURE-DETAIL"],
-            },
-          ],
-        },
-      ],
-      exceptions: [
-        {
-          gateId: "phase21.kubernetes_networkpolicy_enforcement",
-          status: "invalid",
-          owner: "raw-owner@example.com",
-          failures: ["RAW-EXCEPTION-DETAIL"],
-        },
-      ],
-    });
-    const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: testEnv({ GA_CHECKLIST_PATH: checklistPath }),
-    });
-    const response = await api.request("/api/v1/admin/readiness");
-    const body = await response.json();
-    const check = body.data.checks.find(
-      (item: { id: string }) => item.id === "ga_evidence",
-    );
-    const serialized = JSON.stringify(check);
-
-    expect(response.status).toBe(200);
-    expect(check).toMatchObject({
-      status: "fail",
-      severity: "critical",
-      details: {
-        checklistConfigured: true,
-        checklistStatus: "blocked",
-        blockedGateCount: 1,
-        requiredLiveBlockerCount: 1,
-        warningCodes: ["ga_blocked", "live_environment_evidence_required"],
-      },
-    });
-    expect(serialized).not.toContain(checklistPath);
-    expect(serialized).not.toContain("RAW-GA-EVIDENCE-PATH");
-    expect(serialized).not.toContain("RAW-CNI-FAILURE-DETAIL");
-    expect(serialized).not.toContain("RAW-EXCEPTION-DETAIL");
-    expect(serialized).not.toContain("raw-owner@example.com");
   });
 
   it("warns when remote Postgres does not require TLS verification", async () => {
@@ -251,7 +180,7 @@ describe("readiness API", () => {
     expect(JSON.stringify(check)).not.toContain("literal-secret-value");
   });
 
-  it("fails readiness when pgvector partitioned isolation lacks live evidence", async () => {
+  it("passes the vector readiness check in pgvector partitioned isolation mode", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
       env: testEnv({
         VECTOR_ISOLATION_MODE: "pgvector_partitioned_by_org",
@@ -262,53 +191,6 @@ describe("readiness API", () => {
     const check = body.data.checks.find(
       (item: { id: string }) => item.id === "vector_store",
     );
-
-    expect(response.status).toBe(200);
-    expect(check).toMatchObject({
-      status: "fail",
-      severity: "critical",
-      details: {
-        activeDriver: "pgvector",
-        externalVectorStoreDriver: "disabled",
-        isolationMode: "pgvector_partitioned_by_org",
-        evidence: {
-          configured: false,
-          status: "not_configured",
-          tablePartitioned: false,
-          partitionKeyIncludesOrgId: false,
-          partitionCount: 0,
-          hnswIndexCount: 0,
-          queryPlanReviewed: false,
-        },
-      },
-    });
-  });
-
-  it("passes the vector readiness check with live pgvector partition evidence", async () => {
-    const evidencePath = writePgvectorIsolationEvidence({
-      status: "passed",
-      mode: "live",
-      checks: {
-        tableExists: true,
-        tablePartitioned: true,
-        partitionKeyIncludesOrgId: true,
-        partitionCount: 16,
-        hnswIndexCount: 16,
-        queryPlanReviewed: true,
-      },
-    });
-    const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: testEnv({
-        VECTOR_ISOLATION_MODE: "pgvector_partitioned_by_org",
-        PGVECTOR_PHYSICAL_ISOLATION_EVIDENCE_PATH: evidencePath,
-      }),
-    });
-    const response = await api.request("/api/v1/admin/readiness");
-    const body = await response.json();
-    const check = body.data.checks.find(
-      (item: { id: string }) => item.id === "vector_store",
-    );
-    const serialized = JSON.stringify(check);
 
     expect(response.status).toBe(200);
     expect(check).toMatchObject({
@@ -317,20 +199,8 @@ describe("readiness API", () => {
         activeDriver: "pgvector",
         externalVectorStoreDriver: "disabled",
         isolationMode: "pgvector_partitioned_by_org",
-        pgvectorPhysicalIsolationEvidence: {
-          configured: true,
-          status: "satisfied",
-          evidenceStatus: "passed",
-          evidenceMode: "live",
-          tablePartitioned: true,
-          partitionKeyIncludesOrgId: true,
-          partitionCount: 16,
-          hnswIndexCount: 16,
-          queryPlanReviewed: true,
-        },
       },
     });
-    expect(serialized).not.toContain(evidencePath);
   });
 
   it("fails readiness when Qdrant uses external secrets but secret resolution is disabled", async () => {
@@ -482,86 +352,14 @@ describe("readiness API", () => {
     expect(serialized).not.toContain(qdrantApiKey);
   });
 
-  it("fails readiness when external vector isolation lacks reviewed live Qdrant evidence", async () => {
+  it("passes readiness when external vector isolation routes to Qdrant with matching policies", async () => {
     const qdrantApiKey = "qdrant-readiness-key";
-    const qdrantCalls: Array<string> = [];
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
       env: testEnv({
         EXTERNAL_VECTOR_STORE_DRIVER: "qdrant",
         QDRANT_URL: "https://qdrant.example.com",
         QDRANT_COLLECTION: "romeo-prod",
         QDRANT_API_KEY_REF: "env://QDRANT_API_KEY",
-        SECRET_RESOLVER_DRIVER: "env",
-        VECTOR_NAMESPACE_POLICY: "org",
-        VECTOR_PARTITIONING_POLICY: "workspace",
-        VECTOR_ISOLATION_MODE: "external_namespace_per_org",
-      }),
-      secretResolver: new EnvironmentSecretResolver({
-        QDRANT_API_KEY: qdrantApiKey,
-      }),
-      qdrantClientFactory: qdrantSdkClientFactoryFromFetch(async (input) => {
-        qdrantCalls.push(String(input));
-        return new Response(
-          JSON.stringify({
-            result: { status: "green", optimizer_status: "ok" },
-          }),
-          {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          },
-        );
-      }),
-    });
-    const response = await api.request("/api/v1/admin/readiness");
-    const body = await response.json();
-    const check = body.data.checks.find(
-      (item: { id: string }) => item.id === "vector_store",
-    );
-    const serialized = JSON.stringify(check);
-
-    expect(response.status).toBe(200);
-    expect(check).toMatchObject({
-      status: "fail",
-      severity: "critical",
-      details: {
-        activeDriver: "qdrant",
-        externalVectorStoreDriver: "qdrant",
-        externalVectorStoreConfigured: true,
-        externalVectorStoreRoutingActive: true,
-        isolationMode: "external_namespace_per_org",
-        namespacePolicy: "org",
-        partitioningPolicy: "workspace",
-        qdrantLiveEvidence: {
-          configured: false,
-          status: "not_configured",
-        },
-      },
-    });
-    expect(check.details.missing).toEqual([
-      "satisfied QDRANT_LIVE_EVIDENCE_PATH",
-    ]);
-    expect(qdrantCalls).toEqual([]);
-    expect(serialized).not.toContain("qdrant.example.com");
-    expect(serialized).not.toContain("romeo-prod");
-    expect(serialized).not.toContain("env://QDRANT_API_KEY");
-    expect(serialized).not.toContain(qdrantApiKey);
-  });
-
-  it("passes readiness when external vector isolation has matching reviewed live Qdrant evidence", async () => {
-    const qdrantApiKey = "qdrant-readiness-key";
-    const evidencePath = writeQdrantLiveEvidence({
-      status: "passed",
-      mode: "live",
-      namespacePolicy: "org",
-      partitioningPolicy: "workspace",
-    });
-    const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: testEnv({
-        EXTERNAL_VECTOR_STORE_DRIVER: "qdrant",
-        QDRANT_URL: "https://qdrant.example.com",
-        QDRANT_COLLECTION: "romeo-prod",
-        QDRANT_API_KEY_REF: "env://QDRANT_API_KEY",
-        QDRANT_LIVE_EVIDENCE_PATH: evidencePath,
         SECRET_RESOLVER_DRIVER: "env",
         VECTOR_NAMESPACE_POLICY: "org",
         VECTOR_PARTITIONING_POLICY: "workspace",
@@ -611,7 +409,6 @@ describe("readiness API", () => {
         },
       },
     });
-    expect(serialized).not.toContain(evidencePath);
     expect(serialized).not.toContain("qdrant.example.com");
     expect(serialized).not.toContain("romeo-prod");
     expect(serialized).not.toContain("env://QDRANT_API_KEY");
@@ -1393,167 +1190,7 @@ describe("readiness API", () => {
     });
     expect(JSON.stringify(check)).not.toContain("literal-secret");
   });
-
-  it("fails readiness when fail-closed connector egress has no host allowlist", async () => {
-    const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: testEnv({
-        DATA_CONNECTOR_EXECUTION_DRIVER: "website-fetch",
-        DATA_CONNECTOR_EGRESS_POLICY: "require_allowlist",
-      }),
-    });
-    const response = await api.request("/api/v1/admin/readiness");
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(
-      body.data.checks.some(
-        (check: { id: string; status: string }) =>
-          check.id === "connector_egress_policy" && check.status === "fail",
-      ),
-    ).toBe(true);
-  });
 });
-
-function writePgvectorIsolationEvidence(input: {
-  status: "failed" | "passed" | "planned";
-  mode: "dry-run" | "live";
-  checks: Record<string, unknown>;
-}): string {
-  const directory = mkdtempSync(join(tmpdir(), "romeo-pgvector-evidence-"));
-  const path = join(directory, "pgvector-isolation.json");
-  writeFileSync(
-    path,
-    JSON.stringify(
-      {
-        schemaVersion: "romeo.pgvector-physical-isolation-review.v1",
-        generatedAt: "2026-07-02T00:00:00.000Z",
-        status: input.status,
-        mode: input.mode,
-        target: {
-          expectedIsolationMode: "pgvector_partitioned_by_org",
-          table: "knowledge_chunk_embeddings",
-        },
-        checks: input.checks,
-      },
-      null,
-      2,
-    ),
-    "utf8",
-  );
-  return path;
-}
-
-function writeGaChecklistEvidence(input: Record<string, unknown>): string {
-  const directory = mkdtempSync(join(tmpdir(), "romeo-ga-checklist-"));
-  const path = join(directory, "ga-checklist.json");
-  writeFileSync(
-    path,
-    JSON.stringify(
-      {
-        schemaVersion: "romeo.ga-checklist.v1",
-        generatedAt: "2026-07-07T00:00:00.000Z",
-        strict: true,
-        ...input,
-      },
-      null,
-      2,
-    ),
-    "utf8",
-  );
-  return path;
-}
-
-function writeQdrantLiveEvidence(input: {
-  status: "failed" | "passed" | "planned";
-  mode: "dry-run" | "live";
-  namespacePolicy: "knowledge_base" | "none" | "org" | "workspace";
-  partitioningPolicy: "knowledge_base" | "none" | "org" | "workspace";
-}): string {
-  const directory = mkdtempSync(join(tmpdir(), "romeo-qdrant-evidence-"));
-  const path = join(directory, "qdrant-live-evidence.json");
-  writeFileSync(
-    path,
-    JSON.stringify(
-      {
-        schemaVersion: "romeo.qdrant-live-evidence.v1",
-        generatedAt: "2026-07-02T00:00:00.000Z",
-        status: input.status,
-        mode: input.mode,
-        target: {
-          driver: "qdrant",
-          endpointConfigured: true,
-          endpointValid: true,
-          endpointScheme: "https",
-          endpointHostSha256:
-            "c17c302e15f4e7b9a6d2d64a3db87f4563cbb14d9b728db7ac4fd516f5b8c3dd",
-          collectionConfigured: true,
-          collectionSha256:
-            "5c71f9989e6806562c0f44a50e430ef291c960f59087710059b9f8892e6c6624",
-          credentialConfigured: true,
-          unauthenticatedAllowed: false,
-          namespacePolicy: input.namespacePolicy,
-          partitioningPolicy: input.partitioningPolicy,
-          dimensions: 8,
-          timeoutMs: 15000,
-        },
-        collection: {
-          status: "green",
-          optimizerStatus: "ok",
-          pointsCount: 10,
-          vectorsCount: 10,
-          indexedVectorsCount: 10,
-          segmentsCount: 1,
-        },
-        mutation: {
-          requiresConfirmMutation: true,
-          confirmed: true,
-          insertedPointCount: 4,
-          cleanupAttempted: true,
-        },
-        isolation: {
-          scopedQueryResultCount: 1,
-          expectedHitReturned: true,
-          namespaceTrapExcluded: true,
-          partitionTrapExcluded: true,
-          foreignOrgTrapExcluded: true,
-          vectorsReturned: false,
-          payloadReturned: true,
-          filter: {
-            orgFilterApplied: true,
-            workspaceFilterApplied: true,
-            knowledgeBaseFilterApplied: true,
-            sourceFilterApplied: true,
-            providerModelDimensionFilterApplied: true,
-            namespaceFilterApplied: input.namespacePolicy !== "none",
-            partitionFilterApplied: input.partitioningPolicy !== "none",
-          },
-        },
-        deletion: {
-          scopedDeleteIssued: true,
-          postDeleteResultCount: 0,
-          expectedHitRemoved: true,
-          cleanupByPointIdAttempted: true,
-        },
-        redaction: {
-          endpointReturned: false,
-          collectionReturned: false,
-          apiKeyReturned: false,
-          evidenceFileBodyReturned: false,
-          rawEvidencePathReturned: false,
-          namespaceValuesReturned: false,
-          partitionValuesReturned: false,
-          payloadValuesReturned: false,
-          pointIdsReturned: false,
-          vectorValuesReturned: false,
-        },
-      },
-      null,
-      2,
-    ),
-    "utf8",
-  );
-  return path;
-}
 
 function liveReadyObjectStore(): ObjectStore {
   return Object.assign(new MemoryObjectStore(), {

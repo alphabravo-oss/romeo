@@ -102,10 +102,6 @@ const adminSectionNamespaces: Record<string, readonly LocaleNamespace[]> = {
     "integration-automation",
     "tool-connector-admin",
   ),
-  "connected-apps": withNamespaces(
-    adminCommonNamespaces,
-    "integration-automation",
-  ),
   governance: withNamespaces(
     adminCommonNamespaces,
     "governance",

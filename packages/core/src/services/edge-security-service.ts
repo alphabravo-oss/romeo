@@ -6,10 +6,6 @@ import {
   edgeSecurityChecks,
   isLocalhost,
 } from "./edge-security-checks";
-import {
-  liveEdgeEvidenceCheck,
-  readLiveEdgeEvidence,
-} from "./edge-security-live-evidence";
 import type { EdgeSecurityPostureReport } from "./edge-security-types";
 
 export * from "./edge-security-types";
@@ -23,43 +19,25 @@ export class EdgeSecurityService {
     const appOriginHttps = appOrigin.protocol === "https:";
     const localhost = isLocalhost(appOrigin.hostname);
     const allowedOriginRuleCount = csvCount(this.env.EDGE_ALLOWED_ORIGINS);
-    const liveEvidence = await readLiveEdgeEvidence(
-      this.env.EDGE_ENFORCEMENT_EVIDENCE_PATH,
-    );
-    const observedWafFailure = liveEvidence.failureCodes.some((code) =>
-      code.includes("waf"),
-    );
-    const observedWafEnforcement =
-      liveEvidence.mode === "live" &&
-      liveEvidence.waf.checked &&
-      liveEvidence.waf.status === "passed" &&
-      !observedWafFailure
-        ? ("block" as const)
-        : liveEvidence.waf.checked
-          ? ("failed" as const)
-          : ("unknown" as const);
-    const checks = [
-      ...edgeSecurityChecks({
-        allowedOriginRuleCount,
-        appOriginHttps,
-        hstsEnabled: this.env.EDGE_HSTS_ENABLED,
-        hstsMaxAgeSeconds: this.env.EDGE_HSTS_MAX_AGE_SECONDS,
-        localhost,
-        fileDirectUploadMaxBytes: this.env.FILE_DIRECT_UPLOAD_MAX_BYTES,
-        fileInlineEncodedMaxBytes: base64LengthLimitFor(
-          this.env.FILE_INLINE_MAX_BYTES,
-        ),
-        fileInlineMaxBytes: this.env.FILE_INLINE_MAX_BYTES,
-        fileResumableUploadMaxBytes: this.env.FILE_RESUMABLE_UPLOAD_MAX_BYTES,
-        messageAttachmentMaxBytes: this.env.MESSAGE_ATTACHMENT_MAX_BYTES,
-        proxyMode: this.env.EDGE_TRUSTED_PROXY_MODE,
-        rateLimitDriver: this.env.HTTP_RATE_LIMIT_DRIVER,
-        requestBodyMaxBytes: this.env.REQUEST_BODY_MAX_BYTES,
-        tlsTermination: this.env.EDGE_TLS_TERMINATION,
-        wafMode: this.env.EDGE_WAF_MODE,
-      }),
-      liveEdgeEvidenceCheck(liveEvidence),
-    ];
+    const checks = edgeSecurityChecks({
+      allowedOriginRuleCount,
+      appOriginHttps,
+      hstsEnabled: this.env.EDGE_HSTS_ENABLED,
+      hstsMaxAgeSeconds: this.env.EDGE_HSTS_MAX_AGE_SECONDS,
+      localhost,
+      fileDirectUploadMaxBytes: this.env.FILE_DIRECT_UPLOAD_MAX_BYTES,
+      fileInlineEncodedMaxBytes: base64LengthLimitFor(
+        this.env.FILE_INLINE_MAX_BYTES,
+      ),
+      fileInlineMaxBytes: this.env.FILE_INLINE_MAX_BYTES,
+      fileResumableUploadMaxBytes: this.env.FILE_RESUMABLE_UPLOAD_MAX_BYTES,
+      messageAttachmentMaxBytes: this.env.MESSAGE_ATTACHMENT_MAX_BYTES,
+      proxyMode: this.env.EDGE_TRUSTED_PROXY_MODE,
+      rateLimitDriver: this.env.HTTP_RATE_LIMIT_DRIVER,
+      requestBodyMaxBytes: this.env.REQUEST_BODY_MAX_BYTES,
+      tlsTermination: this.env.EDGE_TLS_TERMINATION,
+      wafMode: this.env.EDGE_WAF_MODE,
+    });
 
     return {
       status: checks.some((check) => check.status === "warn")
@@ -88,11 +66,6 @@ export class EdgeSecurityService {
       ingress: {
         allowedOriginRuleCount,
         desiredWafMode: this.env.EDGE_WAF_MODE,
-        observedWafEnforcement,
-        ...(observedWafEnforcement !== "unknown" &&
-        liveEvidence.generatedAt !== undefined
-          ? { observedWafAt: liveEvidence.generatedAt }
-          : {}),
         wafMode: this.env.EDGE_WAF_MODE,
       },
       limits: {
@@ -122,13 +95,10 @@ export class EdgeSecurityService {
         strictTransportSecurity:
           this.env.EDGE_HSTS_ENABLED && this.env.EDGE_HSTS_MAX_AGE_SECONDS > 0,
       },
-      liveEvidence,
       checks,
       redaction: {
-        evidenceFileBodyReturned: false,
         rawAllowedOriginsReturned: false,
         rawAppOriginReturned: false,
-        rawEvidencePathReturned: false,
         rawIngressAnnotationsReturned: false,
         rawProxyIpRangesReturned: false,
         rawSecretsReturned: false,

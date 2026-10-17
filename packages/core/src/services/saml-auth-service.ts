@@ -10,10 +10,8 @@ import type {
   SamlProviderLoginConfig,
 } from "./auth-provider-settings-service";
 import { createUserAuthSubject, localUserScopes } from "./auth-subject";
-import {
-  provisionExternalUser,
-  syncExternalGroupMemberships,
-} from "./external-user-provisioning";
+import { provisionExternalUser } from "./external-user-provisioning";
+import { syncExternalGroupMemberships } from "./sso-membership-reconciliation";
 import {
   defaultSamlClientFactory,
   type SamlClientFactory,
@@ -205,6 +203,7 @@ export class SamlAuthService {
         await syncExternalGroupMemberships(repository, {
           groupIds: identity.externalGroupIds,
           orgId: stored.orgId,
+          source: { kind: "saml", providerKey: config.providerId },
           userId,
         });
         const subject = await createUserAuthSubject(repository, user, {

@@ -6,17 +6,6 @@ import {
 } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
-import type { DelegatedOAuthTokenEnvelope } from "../domain/delegated-oauth";
-import { InMemoryRomeoRepository } from "../repositories/in-memory";
-import { testEnv } from "../test-support/env";
-import { DelegatedOAuthConfiguration } from "./delegated-oauth-configuration";
-import { DelegatedOAuthTokenRuntime } from "./delegated-oauth-token-runtime";
-import {
-  delegatedOAuthTokenContext,
-  DelegatedOAuthTokenVault,
-  type DelegatedOAuthStoredToken,
-  type DelegatedOAuthTokenContext,
-} from "./delegated-oauth-token-vault";
 import {
   LocalMfaSecretVault,
   type LocalMfaSecretContext,
@@ -75,133 +64,12 @@ describe("record-bound secret envelopes", () => {
     expect(JSON.parse(migrated)).toMatchObject({ v: 2 });
     expect(vault.decrypt(migrated, context)).toBe(plaintext);
   });
-
-  it("binds delegated OAuth v3 ciphertext and key version to every connection identity field", () => {
-    const vault = new DelegatedOAuthTokenVault(encryptionKey);
-    const context: DelegatedOAuthTokenContext = {
-      connectionId: "delegated_connection_primary",
-      connectorType: "github",
-      orgId: "org_a",
-      providerId: "github",
-      userId: "user_a",
-      workspaceId: "workspace_a",
-    };
-    const token = delegatedToken();
-    const encrypted = vault.encrypt(token, context);
-
-    expect(encrypted).toMatchObject({
-      v: 3,
-      alg: "A256GCM",
-      keyVersion: vault.activeKeyVersion,
-    });
-    expect(vault.decrypt(encrypted, context)).toEqual(token);
-
-    const swappedContexts: DelegatedOAuthTokenContext[] = [
-      { ...context, orgId: "org_b" },
-      { ...context, workspaceId: "workspace_b" },
-      { ...context, userId: "user_b" },
-      { ...context, connectionId: "delegated_connection_secondary" },
-      { ...context, providerId: "provider_b" },
-      { ...context, connectorType: "connector_b" },
-    ];
-    for (const swappedContext of swappedContexts) {
-      expect(() => vault.decrypt(encrypted, swappedContext)).toThrow(/.+/u);
-    }
-
-    expect(() =>
-      vault.decrypt(
-        { ...encrypted, tag: tamperEncoded(encrypted.tag) },
-        context,
-      ),
-    ).toThrow(/.+/u);
-  });
-
-  it("reads legacy delegated OAuth v1 ciphertext and rewraps it as versioned bound v3", () => {
-    const vault = new DelegatedOAuthTokenVault(encryptionKey);
-    const context: DelegatedOAuthTokenContext = {
-      connectionId: "delegated_connection_legacy",
-      connectorType: "github",
-      orgId: "org_a",
-      providerId: "github",
-      userId: "user_a",
-      workspaceId: "workspace_a",
-    };
-    const token = delegatedToken();
-    const legacy = legacyEnvelope(
-      JSON.stringify(token),
-      "romeo delegated oauth token vault v1",
-    );
-
-    const plaintext = vault.decrypt(legacy, context);
-    const migrated = vault.encrypt(plaintext, context);
-
-    expect(plaintext).toEqual(token);
-    expect(migrated).toMatchObject({
-      v: 3,
-      keyVersion: vault.activeKeyVersion,
-    });
-    expect(vault.decrypt(migrated, context)).toEqual(token);
-  });
-
-  it("opportunistically migrates a used delegated OAuth v1 token", async () => {
-    const repository = new InMemoryRomeoRepository();
-    const env = testEnv({
-      DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY: encryptionKey,
-    });
-    const token = delegatedToken();
-    const connection = await repository.createDelegatedOAuthConnection({
-      id: "delegated_connection_runtime_legacy",
-      connectorType: "github",
-      createdAt: "2026-08-13T12:00:00.000Z",
-      orgId: "org_a",
-      providerAccountId: "provider_account_a",
-      providerId: "github",
-      scopes: ["repo"],
-      status: "active",
-      token: legacyEnvelope(
-        JSON.stringify(token),
-        "romeo delegated oauth token vault v1",
-      ),
-      updatedAt: "2026-08-13T12:00:00.000Z",
-      userId: "user_a",
-      workspaceId: "workspace_a",
-    });
-    const runtime = new DelegatedOAuthTokenRuntime(
-      repository,
-      env,
-      new DelegatedOAuthConfiguration(env),
-    );
-
-    expect((await runtime.getUsableToken(connection)).token).toEqual(token);
-
-    const migrated = await repository.getDelegatedOAuthConnection(
-      connection.id,
-    );
-    if (migrated === undefined) throw new Error("Migrated connection missing.");
-    expect(migrated.token.v).toBe(3);
-    expect(
-      new DelegatedOAuthTokenVault(encryptionKey).decrypt(
-        migrated.token,
-        delegatedOAuthTokenContext(migrated),
-      ),
-    ).toEqual(token);
-  });
 });
-
-function delegatedToken(): DelegatedOAuthStoredToken {
-  return {
-    accessToken: "delegated-access-token",
-    obtainedAt: "2026-08-13T12:00:00.000Z",
-    refreshToken: "delegated-refresh-token",
-    scopes: ["repo"],
-    tokenType: "bearer",
-  };
-}
 
 function legacyEnvelope(
   plaintext: string,
   keyPurpose: string,
-): DelegatedOAuthTokenEnvelope {
+): Record<string, unknown> {
   const key = createHash("sha256")
     .update(keyPurpose, "utf8")
     .update(encryptionKey, "utf8")

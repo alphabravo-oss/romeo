@@ -5,15 +5,7 @@ import {
   abortableQuery,
   serverQueryPolicy,
 } from "../../lib/server-query-options";
-import { getGaEvidencePosture, getPostgresOperationalPosture } from "./queries";
-
-export function gaEvidencePostureQueryOptions() {
-  return queryOptions({
-    ...serverQueryPolicy("volatile", "postureGaEvidence"),
-    queryKey: appQueryKeys.postureGaEvidence(),
-    queryFn: ({ signal }) => abortableQuery(signal, getGaEvidencePosture),
-  });
-}
+import { getPostgresOperationalPosture } from "./queries";
 
 export function postgresOperationalPostureQueryOptions() {
   return queryOptions({

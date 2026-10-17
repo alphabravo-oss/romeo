@@ -1,6 +1,6 @@
 import { seededSubject, type AuthSubject } from "@romeo/auth";
-import { readEnv } from "@romeo/config";
-import type { MiddlewareHandler } from "hono";
+import { isLoopbackHostname, readEnv } from "@romeo/config";
+import type { Context, MiddlewareHandler } from "hono";
 
 import type { RomeoRepository } from "../domain/repository";
 import type { RepositoryRequestScope } from "../domain/repository-request-scope";
@@ -43,19 +43,12 @@ const publicPaths = new Set([
   "/api/v1/auth/ldap/login",
   "/api/v1/auth/local/login",
   "/api/v1/auth/local/mfa/verify",
-  "/api/v1/delegated-oauth/callback",
   "/api/v1/device-authorizations/refresh",
   "/api/v1/health",
   "/api/v1/health/object-storage",
   "/api/v1/readyz",
   "/api/v1/openapi.json",
   "/api/v1/docs",
-  "/api/v1/openwebui/config",
-  "/api/v1/openwebui/version",
-  "/api/v1/openwebui/version/updates",
-  "/api/config",
-  "/api/version",
-  "/api/version/updates",
   "/api/v1/billing/webhooks/generic",
   "/api/v1/billing/webhooks/stripe",
 ]);
@@ -111,7 +104,11 @@ export function requestContext(
           ? undefined
           : readCookie(context.req.header("cookie"), sessionCookieName),
         allowAnonymous: workerBrokerRequest || publicPaths.has(requestPath),
-        devSeededLogin: workerBrokerRequest ? false : devSeededLogin,
+        // The seeded identity is a development convenience; it is never
+        // granted to a request addressed to a non-loopback host, which also
+        // defeats DNS-rebinding pages that reach a developer's local server.
+        devSeededLogin:
+          !workerBrokerRequest && devSeededLogin && isLoopbackRequest(context),
       };
       const subject =
         scope === undefined || factory === undefined
@@ -168,6 +165,18 @@ export function requestContext(
       }
     });
   };
+}
+
+/** True when both the request URL and any Host header name a loopback host. */
+export function isLoopbackRequest(context: Context): boolean {
+  if (!isLoopbackHostname(new URL(context.req.url).hostname)) return false;
+  const host = context.req.header("host");
+  if (host === undefined) return true;
+  try {
+    return isLoopbackHostname(new URL(`http://${host}`).hostname);
+  } catch {
+    return false;
+  }
 }
 
 export function isWorkerBrokerPath(path: string): boolean {

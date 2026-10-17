@@ -605,7 +605,10 @@ describe("collaboration API", () => {
   });
 
   it("creates chat comments with bounded same-org mentions", async () => {
-    const api = createRomeoApi(new InMemoryRomeoRepository());
+    const api = createRomeoApi(new InMemoryRomeoRepository(), {
+      // An injected transport keeps channel validation off live DNS.
+      webhookFetch: async () => new Response(null, { status: 204 }),
+    });
     const serviceAccountResponse = await api.request(
       "/api/v1/service-accounts",
       {
@@ -1066,10 +1069,13 @@ describe("collaboration API", () => {
 
   it("redacts notification channel config readback while retaining internal delivery config", async () => {
     const repository = new InMemoryRomeoRepository();
-    const api = createRomeoApi(repository);
+    const api = createRomeoApi(repository, {
+      webhookFetch: async () => new Response(null, { status: 204 }),
+    });
     const rawWebhookUrl = "https://hooks.example.com/romeo/raw-webhook-secret";
     const rawSlackUrl = "https://hooks.slack.com/services/T/B/raw-secret";
-    const rawTeamsUrl = "https://teams.example.com/hooks/raw-secret";
+    const rawTeamsUrl =
+      "https://contoso.webhook.office.com/webhookb2/raw-secret";
     const rawEmail = "Sensitive.Target+Raw@Example.com";
     const rawPagerDutyRef = "env://PAGERDUTY_RAW_ROUTING_KEY";
     const rawFcmTokenRef = "env://FCM_RAW_DEVICE_TOKEN";

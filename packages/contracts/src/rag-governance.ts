@@ -216,69 +216,6 @@ export const RagPolicyChangeRequestSchema = z
   })
   .openapi("RagPolicyChangeRequest");
 
-const evidenceStatus = z.enum(["failed", "passed", "planned", "unknown"]);
-const evidenceMode = z.enum(["dry-run", "live"]);
-const evidenceInvalidReason = z.enum([
-  "invalid_json",
-  "read_failed",
-  "schema_mismatch",
-]);
-const qdrantEvidenceRedaction = z.strictObject({
-  apiKeyReturned: z.literal(false),
-  collectionReturned: z.literal(false),
-  endpointReturned: z.literal(false),
-  evidenceFileBodyReturned: z.literal(false),
-  namespaceValuesReturned: z.literal(false),
-  partitionValuesReturned: z.literal(false),
-  payloadValuesReturned: z.literal(false),
-  pointIdsReturned: z.literal(false),
-  rawEvidencePathReturned: z.literal(false),
-  vectorValuesReturned: z.literal(false),
-});
-const QdrantLiveEvidenceSchema = z.strictObject({
-  configured: z.boolean(),
-  status: z.enum(["failed", "invalid", "not_configured", "satisfied"]),
-  schemaVersion: z.literal("romeo.qdrant-live-evidence.v1").optional(),
-  generatedAt: timestamp.optional(),
-  evidenceStatus: evidenceStatus.optional(),
-  evidenceMode: evidenceMode.optional(),
-  invalidReason: evidenceInvalidReason.optional(),
-  namespacePolicy: RagVectorIsolationPolicySchema.optional(),
-  partitioningPolicy: RagVectorIsolationPolicySchema.optional(),
-  collectionHealthRead: z.boolean(),
-  scopedQueryReturnedExpectedPoint: z.boolean(),
-  namespaceTrapExcluded: z.boolean(),
-  partitionTrapExcluded: z.boolean(),
-  foreignOrgTrapExcluded: z.boolean(),
-  vectorsOmittedFromQuery: z.boolean(),
-  scopedDeleteVerified: z.boolean(),
-  cleanupAttempted: z.boolean(),
-  redaction: qdrantEvidenceRedaction,
-});
-const PgvectorEvidenceSchema = z.strictObject({
-  configured: z.boolean(),
-  status: z.enum(["failed", "invalid", "not_configured", "satisfied"]),
-  schemaVersion: z
-    .literal("romeo.pgvector-physical-isolation-review.v1")
-    .optional(),
-  generatedAt: timestamp.optional(),
-  evidenceStatus: evidenceStatus.optional(),
-  evidenceMode: evidenceMode.optional(),
-  invalidReason: evidenceInvalidReason.optional(),
-  tablePartitioned: z.boolean(),
-  partitionKeyIncludesOrgId: z.boolean(),
-  partitionCount: count,
-  hnswIndexCount: count,
-  queryPlanReviewed: z.boolean(),
-  redaction: z.strictObject({
-    databaseUrlReturned: z.literal(false),
-    evidenceFileBodyReturned: z.literal(false),
-    rawEvidencePathReturned: z.literal(false),
-    rawSqlReturned: z.literal(false),
-    vectorValuesReturned: z.literal(false),
-  }),
-});
-
 export const RagPostureReportSchema = z
   .strictObject({
     generatedAt: timestamp,
@@ -305,19 +242,12 @@ export const RagPostureReportSchema = z
         partitioningPolicy: RagVectorIsolationPolicySchema,
         configured: z.boolean(),
         routingActive: z.boolean(),
-        evidence: QdrantLiveEvidenceSchema,
       }),
       physicalIsolation: z.strictObject({
         policy: RagPolicyReportSchema.shape.physicalVectorIsolation,
         deploymentMode: RagPhysicalVectorIsolationModeSchema,
         deploymentMatched: z.boolean(),
-        evidence: PgvectorEvidenceSchema,
-        externalVectorEvidence: QdrantLiveEvidenceSchema,
-        status: z.enum([
-          "deployment_mismatch",
-          "evidence_pending",
-          "satisfied",
-        ]),
+        status: z.enum(["deployment_mismatch", "satisfied"]),
       }),
     }),
     corpus: z.strictObject({
@@ -360,7 +290,6 @@ export const RagPostureReportSchema = z
             "failed_knowledge_jobs",
             "failed_knowledge_sources",
             "lexical_fallback_active",
-            "physical_vector_isolation_evidence_pending",
             "physical_vector_isolation_mismatch",
             "stale_embedding_records",
             "stale_source_chunk_counts",

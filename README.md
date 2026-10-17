@@ -74,6 +74,16 @@ OpenAI, OpenRouter, Ollama, and vLLM-compatible deployments. The composer's
 model selection is stored with the chat and model pins are stored with the
 user, so both survive browser and device changes.
 
+Provider requests may only reach public addresses. Outside
+`ROMEO_ENV=production`, loopback (`http://localhost:11434`) is also allowed, so
+a local `pnpm dev` + Ollama works as-is. Any other private destination — Ollama
+on a LAN host, vLLM in the cluster, `host.docker.internal` from Compose (allowed
+by default in `deploy/compose/.env.example`), or loopback in production — must
+be listed in `PROVIDER_PRIVATE_NETWORK_ALLOWED_HOSTS` as comma-separated
+`host`, `host:port`, `*.domain`, `[ipv6]:port`, or CIDR entries (for example
+`ollama.lan:11434,vllm.models.svc.cluster.local:8000`). Cloud metadata and
+link-local addresses are always blocked.
+
 ### Run the full stack
 
 ```bash
@@ -155,64 +165,11 @@ with an OpenAPI spec, a TypeScript SDK, a dependency-free Python SDK, and a
 - English, Spanish, and French are available for the core chat controls. The
   remaining administration surfaces continue to use English while their
   translations are completed.
-- Local Ollama text streaming is covered by live acceptance evidence. Live
-  OpenAI-compatible and Anthropic acceptance is reported as `not_configured`
-  until deployment credentials are supplied; adapter tests are not presented
-  as live-provider proof.
-- Multi-replica PostgreSQL/object-storage recovery, browser-engine coverage,
-  and load/soak thresholds have repeatable acceptance evidence. Production
-  bundle budgets are currently a release gate, alongside credentialed
-  target-provider checks, deployment egress enforcement, and
-  immutable-backup-platform expiry. Track the exact evidence status in
-  [`docs/plans/2026-07-16-openwebui-core-production-readiness.md`](docs/plans/2026-07-16-openwebui-core-production-readiness.md).
-
-### Credentialed provider acceptance
-
-These commands exercise the selected external endpoint and write metadata-only
-evidence under `dist/evidence/`. Missing configuration produces
-`not_configured`, never a false pass. Set secrets in the process environment;
-the evidence does not include endpoints, credentials, prompts, response text,
-image bodies, tool arguments, or raw provider payloads.
-
-OpenAI-compatible image generation:
-
-```bash
-ROMEO_LIVE_IMAGE_BASE_URL=https://provider.example/v1 \
-ROMEO_LIVE_IMAGE_MODEL=image-model \
-ROMEO_LIVE_IMAGE_API_KEY=... \
-pnpm evidence:image:credentialed-live
-```
-
-Anthropic Messages API, including streaming text/usage, vision, tool use, and
-tool-result continuation:
-
-```bash
-ROMEO_LIVE_ANTHROPIC_MODEL=claude-model \
-ANTHROPIC_API_KEY=... \
-pnpm evidence:anthropic:credentialed-live
-```
-
-Use `ROMEO_LIVE_ANTHROPIC_BASE_URL` to target an Anthropic-compatible endpoint.
-
-Deployment-selected web search:
-
-```bash
-ROMEO_LIVE_WEB_SEARCH_PROVIDER=brave \
-BRAVE_SEARCH_API_KEY=... \
-pnpm evidence:web-search:deployment-live
-```
-
-Valid providers are `brave`, `tavily`, and `searxng`. Tavily accepts
-`TAVILY_API_KEY`; SearXNG requires `ROMEO_LIVE_WEB_SEARCH_ENDPOINT` and can run
-without a credential. `ROMEO_LIVE_WEB_SEARCH_API_KEY` overrides the provider-
-specific key. Runtime governed-search requests use `WEB_SEARCH_TIMEOUT_MS`
-(default `12000`) and the acceptance collector has its own
-`ROMEO_LIVE_WEB_SEARCH_TIMEOUT_MS` bound.
 
 ### Intentional product non-goals
 
-These are Romeo product boundaries, not backlog items. Do not add them for
-Open WebUI parity or treat their absence as a feature gap:
+These are Romeo product boundaries, not backlog items. Do not add them to match
+other chat products or treat their absence as a feature gap:
 
 - **Code execution:** Romeo does not execute model-generated code or provide an
   arbitrary code interpreter, terminal, notebook, or artifact execution sandbox.
@@ -228,11 +185,14 @@ Open WebUI parity or treat their absence as a feature gap:
 
 ```bash
 pnpm dev        # dev server, in-memory store, seeded login
-pnpm verify     # tests + typecheck + production build across the workspace
-pnpm test       # tests only
+pnpm check      # typecheck every package
+pnpm lint       # oxlint
+pnpm test       # unit tests
+pnpm build      # production build
 ```
 
-`pnpm verify` is the gate — it must exit 0 before anything merges.
+CI (`.github/workflows/ci.yml`) runs these plus security scans, live Postgres
+tests, browser acceptance, Helm render, and Compose smoke tests.
 
 ### Layout
 
@@ -258,7 +218,7 @@ Schema changes are forward-only. The greenfield baseline is locked at
 
 ## Contributing
 
-Issues and pull requests are welcome. Run `pnpm verify` before opening a PR —
+Issues and pull requests are welcome. Run `pnpm check`, `pnpm lint` and `pnpm test` before opening a PR —
 if it isn't green, CI won't be either.
 
 ## License

@@ -1,6 +1,5 @@
 export const nativeInventoriedTableResources = [
   "background_jobs",
-  "data_connector_sync_runs",
   "governance_export_packages",
   "notification_deliveries",
   "notifications",

@@ -7,7 +7,6 @@ import {
   InterfacePreferencesSchema,
   UpdateInterfacePreferencesSchema,
 } from "./interface-preferences";
-import { StartDelegatedOAuthSchema } from "./delegated-oauth";
 import { CreateDeviceAuthorizationSchema } from "./device-authorizations";
 import { EdgeSecurityPostureCheckSchema } from "./edge-security";
 import { LocalLoginSchema, LocalMfaVerifySchema } from "./sessions";
@@ -176,14 +175,6 @@ describe("Romeo HTTP contracts", () => {
         challengeToken: "challenge",
         code: "123456",
         recoveryCode: "rmfa-aaaa-bbbb-cccc-dddd",
-      }).success,
-    ).toBe(false);
-    expect(
-      StartDelegatedOAuthSchema.safeParse({
-        providerId: "github",
-        workspaceId: "workspace_1",
-        connectorType: "github",
-        uncontracted: true,
       }).success,
     ).toBe(false);
     expect(
@@ -422,7 +413,6 @@ describe("Romeo HTTP contracts", () => {
         "/api/v1/scim/v2/Users/{userId}",
         "/api/v1/scim/v2/Groups",
         "/api/v1/scim/v2/Groups/{groupId}",
-        "/api/v1/admin/ga/evidence-posture",
         "/api/v1/admin/postgres/operational-posture",
         "/api/v1/collaboration/channels",
         "/api/v1/collaboration/channels/direct-messages",
@@ -563,12 +553,6 @@ describe("Romeo HTTP contracts", () => {
     ).toMatchObject({
       operationId: "edgeSecurity.getPosture",
       tags: ["Edge security"],
-    });
-    expect(
-      document.paths?.["/api/v1/admin/ga/evidence-posture"]?.get,
-    ).toMatchObject({
-      operationId: "operationalPosture.getGaEvidence",
-      tags: ["Operational posture"],
     });
     expect(
       document.paths?.["/api/v1/admin/postgres/operational-posture"]?.get,
@@ -730,54 +714,5 @@ describe("Romeo HTTP contracts", () => {
         expect(operation.security).toEqual(expect.any(Array));
       }
     }
-  });
-
-  it("publishes optional OpenWebUI contracts only when enabled", () => {
-    const disabled = contractOpenApiDocument();
-    const enabled = contractOpenApiDocument({
-      openWebUiCompatibilityEnabled: true,
-    });
-
-    expect(disabled.paths?.["/api/v1/openwebui/config"]).toBeUndefined();
-    expect(enabled.paths?.["/api/v1/openwebui/config"]?.get).toMatchObject({
-      operationId: "openWebUi.getConfig",
-      tags: ["OpenWebUI compatibility"],
-      security: [],
-    });
-    expect(enabled.paths?.["/api/v1/auths/"]?.get).toMatchObject({
-      operationId: "openWebUi.getSessionUser",
-      security: [{ bearerAuth: [] }, { sessionCookie: [] }],
-    });
-    expect(enabled.paths?.["/api/config"]?.get).toMatchObject({
-      operationId: "openWebUi.getConfigAlias",
-    });
-    expect(enabled.paths?.["/api/v1/chats/"]?.get).toMatchObject({
-      operationId: "openWebUi.listChats",
-      security: [{ bearerAuth: [] }, { sessionCookie: [] }],
-    });
-    expect(
-      enabled.paths?.["/api/v1/chats/{chatId}/tags"]?.delete,
-    ).toMatchObject({ operationId: "openWebUi.deleteChatTag" });
-    expect(enabled.paths?.["/api/v1/folders/{folderId}"]?.delete).toMatchObject(
-      {
-        operationId: "openWebUi.deleteFolder",
-      },
-    );
-    expect(
-      enabled.paths?.["/api/v1/collaboration/folders/{folderId}"]?.delete,
-    ).toMatchObject({ operationId: "collaboration.deleteFolder" });
-    expect(enabled.paths?.["/api/v1/channels/"]?.get).toMatchObject({
-      operationId: "openWebUi.listChannels",
-    });
-    expect(
-      enabled.paths?.[
-        "/api/v1/channels/{channelId}/messages/{messageId}/reactions/add"
-      ]?.post,
-    ).toMatchObject({ operationId: "openWebUi.addChannelMessageReaction" });
-    expect(
-      enabled.paths?.["/api/v1/channels/{channelId}/events"]?.get?.responses?.[
-        "200"
-      ]?.content,
-    ).toHaveProperty("text/event-stream");
   });
 });

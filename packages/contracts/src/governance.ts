@@ -46,7 +46,6 @@ export {
   DataExportPreviewSchema,
   DataExportRequestSchema,
   DataRightsCoverageReportSchema,
-  DataRightsRetentionEvidenceSummarySchema,
   DeleteDataExportPackageRequestSchema,
   ExecuteDataDeletionRequestSchema,
   GovernanceDataDeletionPreviewSchema,

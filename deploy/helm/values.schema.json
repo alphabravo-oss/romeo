@@ -144,60 +144,11 @@
           "type": "string",
           "enum": ["s3"]
         },
-        "DATA_CONNECTOR_EXECUTION_DRIVER": {
-          "type": "string",
-          "enum": [
-            "disabled",
-            "website-fetch",
-            "github-fetch",
-            "s3-fetch",
-            "managed-fetch"
-          ]
-        },
-        "DATA_CONNECTOR_EGRESS_POLICY": {
-          "type": "string",
-          "enum": ["allow_public", "require_allowlist"]
-        },
-        "DATA_CONNECTOR_FETCH_ALLOWED_HOSTS": {
-          "type": "string"
-        },
-        "DATA_CONNECTOR_FETCH_MAX_BYTES": {
-          "oneOf": [
-            { "type": "integer", "minimum": 1 },
-            { "type": "string", "pattern": "^[1-9][0-9]*$" }
-          ]
-        },
-        "DATA_CONNECTOR_FETCH_TIMEOUT_MS": {
-          "oneOf": [
-            { "type": "integer", "minimum": 1 },
-            { "type": "string", "pattern": "^[1-9][0-9]*$" }
-          ]
-        },
         "WEB_SEARCH_TIMEOUT_MS": {
           "oneOf": [
             { "type": "integer", "minimum": 1, "maximum": 300000 },
             { "type": "string", "pattern": "^[1-9][0-9]*$" }
           ]
-        },
-        "DATA_CONNECTOR_LIVE_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "DATA_CONNECTOR_WORKER_ENABLED": {
-          "type": "string",
-          "enum": ["true", "false"]
-        },
-        "DATA_CONNECTOR_NETWORK_POLICY_ENABLED": {
-          "type": "string",
-          "enum": ["true", "false"]
-        },
-        "NOTIFICATION_ADAPTER_LIVE_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "VOICE_PROVIDER_LIVE_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "TOOL_DISPATCH_LIVE_EVIDENCE_PATH": {
-          "type": "string"
         },
         "TOOL_DISPATCH_WORKER_ENABLED": {
           "type": "string",
@@ -773,6 +724,10 @@
           "type": "string",
           "pattern": "^$|^[A-Za-z0-9_:-]+$"
         },
+        "PROVIDER_PRIVATE_NETWORK_ALLOWED_HOSTS": {
+          "type": "string",
+          "pattern": "^$|^[a-z0-9.:*\\[\\]/_-]+(,[a-z0-9.:*\\[\\]/_-]+)*$"
+        },
         "VALKEY_SECURITY_EXCEPTION_ENABLED": {
           "type": "string",
           "enum": ["true", "false"]
@@ -890,151 +845,6 @@
           "type": "string",
           "enum": ["single", "multi"]
         },
-        "OPENWEBUI_COMPATIBILITY_ENABLED": {
-          "type": "string",
-          "enum": ["true", "false"]
-        },
-        "GA_CHECKLIST_PATH": {
-          "type": "string"
-        },
-        "GA_TARGET_PREFLIGHT_PATH": {
-          "type": "string"
-        },
-        "GA_TARGET_PLAN_PATH": {
-          "type": "string"
-        },
-        "GA_TARGET_EXECUTION_PATH": {
-          "type": "string"
-        },
-        "GA_EVIDENCE_BUNDLE_PATH": {
-          "type": "string"
-        },
-        "RELEASE_PROVENANCE_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "RELEASE_APPROVAL_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "RELEASE_PUBLISH_PLAN_PATH": {
-          "type": "string"
-        },
-        "RELEASE_AIRGAP_VERIFICATION_PATH": {
-          "type": "string"
-        },
-        "RELEASE_READBACK_PLAN_PATH": {
-          "type": "string"
-        },
-        "RELEASE_READBACK_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "RELEASE_READBACK_VALIDATION_PATH": {
-          "type": "string"
-        },
-        "SUPPORT_BUNDLE_PATH": {
-          "type": "string"
-        },
-        "SUPPORT_BUNDLE_REDACTION_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "CI_BRANCH_PROTECTION_PLAN_PATH": {
-          "type": "string"
-        },
-        "CI_HOSTED_RUN_VERIFICATION_PATH": {
-          "type": "string"
-        },
-        "CI_BRANCH_PROTECTION_VERIFICATION_PATH": {
-          "type": "string"
-        },
-        "IDENTITY_LIVE_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "ANALYTICS_AUTHZ_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "AUDIT_INTEGRITY_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "TARGET_QUALITY_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "ALERT_FIRING_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "MIGRATION_DRILL_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "NETWORK_PARTITION_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "SECRET_ROTATION_DRILL_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "EDGE_ENFORCEMENT_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "KUBERNETES_LIVE_SMOKE_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "KUBERNETES_WORKERS_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "KUBERNETES_NETWORKPOLICY_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "KUBERNETES_CLOUDNATIVEPG_DR_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "KUBERNETES_EXTERNAL_POSTGRES_DR_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "KUBERNETES_TIERED_RAG_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "KUBERNETES_LOAD_SOAK_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "KUBERNETES_KEDA_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "KUBERNETES_LOG_REDACTION_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "POSTGRES_QUERY_PLAN_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "POSTGRES_SLOW_QUERY_TELEMETRY_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "POSTGRES_LOCK_TELEMETRY_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "POSTGRES_ARCHIVAL_PARTITIONING_DECISION_PATH": {
-          "type": "string"
-        },
-        "DATA_RIGHTS_OPERATIONAL_LOG_RETENTION_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "DATA_RIGHTS_BACKUP_RETENTION_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "TENANT_PURGE_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "BILLING_OPERATIONS_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "PROVIDER_OUTAGE_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "NOTIFICATION_ADAPTER_LIVE_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "VOICE_PROVIDER_LIVE_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "BROWSER_AUTOMATION_LIVE_EVIDENCE_PATH": {
-          "type": "string"
-        },
         "BROWSER_AUTOMATION_WORKER_ENABLED": {
           "type": "string",
           "enum": ["true", "false"]
@@ -1112,19 +922,6 @@
             "dedicated_vector_store_per_org"
           ]
         },
-        "PGVECTOR_PHYSICAL_ISOLATION_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "QDRANT_LIVE_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "DELEGATED_OAUTH_GITHUB_CLIENT_ID": {
-          "type": "string"
-        },
-        "DELEGATED_OAUTH_GITHUB_SCOPES": {
-          "type": "string",
-          "pattern": "^$|^[A-Za-z0-9_:./-]+(,[A-Za-z0-9_:./-]+)*$"
-        },
         "TOOL_OPERATION_EXECUTION_DRIVER": {
           "type": "string",
           "enum": ["disabled", "http-fetch"]
@@ -1148,21 +945,6 @@
         "TOOL_DISPATCH_PAYLOAD_STORE_PREFIX": {
           "type": "string",
           "minLength": 1
-        },
-        "DATA_CONNECTOR_FETCH_RETRY_ATTEMPTS": {
-          "oneOf": [
-            { "type": "integer", "minimum": 0, "maximum": 5 },
-            { "type": "string", "pattern": "^[0-5]$" }
-          ]
-        },
-        "DATA_CONNECTOR_FETCH_RETRY_BACKOFF_MS": {
-          "oneOf": [
-            { "type": "integer", "minimum": 0, "maximum": 60000 },
-            {
-              "type": "string",
-              "pattern": "^(0|[1-9][0-9]{0,3}|[1-5][0-9]{4}|60000)$"
-            }
-          ]
         }
       }
     },
@@ -1185,41 +967,12 @@
         }
       }
     },
-    "evidenceMount": {
-      "type": "object",
-      "additionalProperties": true,
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "name": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 63,
-          "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
-        },
-        "mountPath": {
-          "type": "string",
-          "minLength": 2,
-          "pattern": "^/.*$"
-        },
-        "configMapName": {
-          "type": "string",
-          "maxLength": 253,
-          "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
-        },
-        "secretName": {
-          "type": "string",
-          "maxLength": 253,
-          "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
-        }
-      }
-    },
     "workers": {
       "type": "object",
       "additionalProperties": true,
       "properties": {
         "podSecurityContext": { "$ref": "#/$defs/podSecurityContext" },
         "securityContext": { "$ref": "#/$defs/containerSecurityContext" },
-        "dataConnectorSync": { "$ref": "#/$defs/workerToggle" },
         "webhookRetry": { "$ref": "#/$defs/workerToggle" },
         "notificationRetry": { "$ref": "#/$defs/workerToggle" },
         "retentionEnforce": { "$ref": "#/$defs/workerToggle" },

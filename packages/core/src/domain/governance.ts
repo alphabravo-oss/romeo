@@ -131,8 +131,6 @@ export interface DataExportCounts {
   fileObjects: number;
   fileObjectBytesIncluded: number;
   knowledgeSourceBytesIncluded: number;
-  dataConnectors: number;
-  dataConnectorSyncs: number;
   workflows: number;
   workflowRuns: number;
   usageEvents: number;
@@ -183,7 +181,6 @@ export interface DataExportDocument {
     chats: Array<Record<string, unknown>>;
     knowledgeBases: Array<Record<string, unknown>>;
     fileObjects: Array<Record<string, unknown>>;
-    dataConnectors: Array<Record<string, unknown>>;
     workflows: Array<Record<string, unknown>>;
     usageEvents: Array<Record<string, unknown>>;
     backgroundJobs: Array<Record<string, unknown>>;
@@ -312,40 +309,6 @@ export interface DataRightsWorkflowCoverage {
   limitations: string[];
 }
 
-export type DataRightsRetentionEvidenceControl = "backups" | "operational_logs";
-
-export type DataRightsRetentionEvidenceStatus =
-  | "external_required"
-  | "failed"
-  | "invalid"
-  | "satisfied";
-
-export type DataRightsRetentionEvidenceInvalidReason =
-  | "control_mismatch"
-  | "invalid_json"
-  | "read_failed"
-  | "required_fields_missing"
-  | "schema_mismatch";
-
-export interface DataRightsRetentionEvidenceSummary {
-  requiredForProduction: true;
-  control: DataRightsRetentionEvidenceControl;
-  status: DataRightsRetentionEvidenceStatus;
-  evidence: {
-    configured: boolean;
-    schemaVersion?: "romeo.data-rights-retention-evidence.v1";
-    generatedAt?: string;
-    evidenceStatus?: "failed" | "passed" | "unknown";
-    retentionDays?: number;
-    destructionValidated?: boolean;
-    encryptedAtRest?: boolean;
-    immutableWindowDays?: number;
-    reviewedSystemCount: number;
-    failureCodes: string[];
-    invalidReason?: DataRightsRetentionEvidenceInvalidReason;
-  };
-}
-
 export interface DataRightsCoverageReport {
   schema: "romeo.data-rights-coverage.v1";
   orgId: string;
@@ -354,18 +317,6 @@ export interface DataRightsCoverageReport {
   deletionWorkflows: DataRightsWorkflowCoverage[];
   exportWorkflows: DataRightsWorkflowCoverage[];
   storageClasses: DataRightsStorageClassCoverage[];
-  retentionEvidence: {
-    operationalLogs: DataRightsRetentionEvidenceSummary;
-    backups: DataRightsRetentionEvidenceSummary;
-    redaction: {
-      backupLocationReturned: false;
-      evidenceFileBodiesReturned: false;
-      logContentReturned: false;
-      objectStoreKeysReturned: false;
-      rawEvidencePathsReturned: false;
-      secretValuesReturned: false;
-    };
-  };
   backupRetention: {
     status: "externally_governed";
     posture: string;

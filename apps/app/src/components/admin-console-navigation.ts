@@ -10,7 +10,6 @@ import KeyRound from "lucide-react/dist/esm/icons/key-round.mjs";
 import KeySquare from "lucide-react/dist/esm/icons/key-square.mjs";
 import LayoutDashboard from "lucide-react/dist/esm/icons/layout-dashboard.mjs";
 import LineChart from "lucide-react/dist/esm/icons/line-chart.mjs";
-import Link2 from "lucide-react/dist/esm/icons/link-2.mjs";
 import MessageSquareText from "lucide-react/dist/esm/icons/message-square-text.mjs";
 import Plug from "lucide-react/dist/esm/icons/plug.mjs";
 import ScrollText from "lucide-react/dist/esm/icons/scroll-text.mjs";
@@ -101,7 +100,6 @@ export const ADMIN_GROUPS: Array<{
         labelKey: "navNotifications",
         icon: Bell,
       },
-      { key: "connected-apps", labelKey: "navConnectedApps", icon: Link2 },
     ],
   },
 ];
@@ -197,9 +195,5 @@ export const ADMIN_META: Record<
   "auth-providers": {
     titleKey: "navAuthentication",
     descriptionKey: "adminAuthenticationDescription",
-  },
-  "connected-apps": {
-    titleKey: "navConnectedApps",
-    descriptionKey: "adminConnectedAppsDescription",
   },
 };

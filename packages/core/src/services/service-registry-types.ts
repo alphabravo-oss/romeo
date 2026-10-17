@@ -29,16 +29,12 @@ import type { CollaborationService } from "./collaboration-service";
 import type { ContentPolicyService } from "./content-policy-service";
 import type { ContentPolicyVersionService } from "./content-policy-version-service";
 import type { PolicyApprovalService } from "./policy-approval-service";
-import type { DataConnectorExecutor } from "./data-connector-executors";
-import type { DataConnectorService } from "./data-connector-service";
-import type { DelegatedOAuthService } from "./delegated-oauth-service";
 import type { DeviceAuthorizationService } from "./device-authorization-service";
 import type { DirectorySyncService } from "./directory-sync-service";
 import type { EdgeSecurityService } from "./edge-security-service";
 import type { EvalService } from "./eval-service";
 import type { FileOcrProvider } from "./file-ocr";
 import type { FileMalwareScanner, FileService } from "./file-service";
-import type { GaEvidencePostureService } from "./ga-evidence-posture-service";
 import type { GovernanceService } from "./governance-service";
 import type { GovernanceExportWorker } from "./governance-export-worker";
 import type { GroupService } from "./group-service";
@@ -71,7 +67,6 @@ import type { OidcPkceService } from "./oidc-pkce-service";
 import type { OpenAiChatCompletionsService } from "./openai-chat-completions-service";
 import type { OpenAiEmbeddingsService } from "./openai-embeddings-service";
 import type { OpenAiModelsService } from "./openai-models-service";
-import type { OpenWebUiCompatibilityService } from "./openwebui-compatibility-service";
 import type { PostgresOperationalPostureService } from "./postgres-operational-posture-service";
 import type { PromptTemplateService } from "./prompt-template-service";
 import type { ProviderService } from "./provider-service";
@@ -134,8 +129,6 @@ export interface RomeoServices {
   contentPolicy: ContentPolicyService;
   contentPolicyVersions: ContentPolicyVersionService;
   contentPolicyApprovals: PolicyApprovalService;
-  dataConnectors: DataConnectorService;
-  delegatedOAuth: DelegatedOAuthService;
   deployment: {
     billingEnabled: boolean;
     malwareScanEnabled: boolean;
@@ -147,7 +140,6 @@ export interface RomeoServices {
   edgeSecurity: EdgeSecurityService;
   evals: EvalService;
   files: FileService;
-  gaEvidencePosture: GaEvidencePostureService;
   knowledge: KnowledgeService;
   jobs: JobService;
   images: ImageGenerationService;
@@ -169,7 +161,6 @@ export interface RomeoServices {
   openAiChatCompletions: OpenAiChatCompletionsService;
   openAiEmbeddings: OpenAiEmbeddingsService;
   openAiModels: OpenAiModelsService;
-  openWebUiCompatibility: OpenWebUiCompatibilityService;
   postgresOperationalPosture: PostgresOperationalPostureService;
   providers: ProviderService;
   providerCapabilityReports: ProviderCapabilityReportService;
@@ -205,13 +196,12 @@ export interface RomeoServices {
 export interface CreateServicesOptions {
   env?: RomeoEnv;
   auditCheckpointSigner?: AuditCheckpointSigner;
-  dataConnectorExecutor?: DataConnectorExecutor;
   knowledgeExtractor?: KnowledgeBinaryExtractor;
   embeddingFetch?: typeof fetch;
   auditExportClient?: AuditExportClient;
   fileMalwareScanner?: FileMalwareScanner;
   fileOcrProvider?: FileOcrProvider;
-  delegatedOAuthFetch?: typeof fetch;
+  oauth2ProviderFetch?: typeof fetch;
   ldapClientFactory?: LdapClientFactory;
   runtimeDatabaseReadinessProbe?: RuntimeDatabaseReadinessProbe;
   runtimeReadinessState?: RuntimeReadinessState;

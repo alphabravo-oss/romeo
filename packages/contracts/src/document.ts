@@ -15,8 +15,6 @@ import { capabilityFlagRoutes } from "./capability-flags";
 import { collaborationRoutes } from "./collaboration-routes";
 import { contentPolicyRoutes } from "./content-policy";
 import { contentPolicyLifecycleRoutes } from "./content-policy-lifecycle";
-import { dataConnectorRoutes } from "./data-connectors";
-import { delegatedOAuthRoutes } from "./delegated-oauth";
 import { deviceAuthorizationRoutes } from "./device-authorizations";
 import { edgeSecurityRoutes } from "./edge-security";
 import { enterpriseSurfaceRoutes } from "./enterprise-surfaces";
@@ -66,9 +64,6 @@ import { managedModelRoutes } from "./managed-models";
 import { notificationRoutes } from "./notifications";
 import { openAiCompatibilityRoutes } from "./openai-compatibility";
 import { openApiRoutes } from "./openapi";
-import { openWebUiChatRoutes } from "./openwebui-chats";
-import { openWebUiChannelRoutes } from "./openwebui-channels";
-import { openWebUiSystemRoutes } from "./openwebui-system";
 import { operationalGovernanceRoutes } from "./operational-governance";
 import { operationalPostureRoutes } from "./operational-posture";
 import { providerCapabilityReportRoutes } from "./provider-capability-reports";
@@ -146,8 +141,6 @@ export const contractRoutes = [
   ...collaborationRoutes,
   ...contentPolicyRoutes,
   ...contentPolicyLifecycleRoutes,
-  ...dataConnectorRoutes,
-  ...delegatedOAuthRoutes,
   ...deviceAuthorizationRoutes,
   ...edgeSecurityRoutes,
   ...enterpriseSurfaceRoutes,
@@ -174,13 +167,7 @@ export const contractRoutes = [
   ...workspaceContentRoutes,
 ] as const;
 
-export interface ContractOpenApiDocumentOptions {
-  openWebUiCompatibilityEnabled?: boolean;
-}
-
-export function contractOpenApiDocument(
-  options: ContractOpenApiDocumentOptions = {},
-) {
+export function contractOpenApiDocument() {
   const registry = new OpenAPIHono();
   for (const [name, schema] of Object.entries(securitySchemes)) {
     registry.openAPIRegistry.registerComponent("securitySchemes", name, schema);
@@ -197,15 +184,6 @@ export function contractOpenApiDocument(
   };
   for (const route of contractRoutes) {
     registerRoute(route as RouteConfig);
-  }
-  if (options.openWebUiCompatibilityEnabled) {
-    for (const route of [
-      ...openWebUiSystemRoutes,
-      ...openWebUiChatRoutes,
-      ...openWebUiChannelRoutes,
-    ]) {
-      registerRoute(route as RouteConfig);
-    }
   }
   const document = registry.getOpenAPI31Document({
     openapi: "3.1.0",

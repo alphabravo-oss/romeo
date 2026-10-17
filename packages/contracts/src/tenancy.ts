@@ -29,7 +29,6 @@ export const WorkspaceExportDocumentSchema = z
       chats: z.number().int().nonnegative(),
       messages: z.number().int().nonnegative(),
       knowledgeBases: z.number().int().nonnegative(),
-      dataConnectors: z.number().int().nonnegative(),
       workflows: z.number().int().nonnegative(),
     }),
     resources: z.strictObject({
@@ -52,14 +51,6 @@ export const WorkspaceExportDocumentSchema = z
           id: identifier,
           createdAt: timestamp,
           updatedAt: timestamp,
-        }),
-      ),
-      dataConnectors: z.array(
-        z.strictObject({
-          id: identifier,
-          knowledgeBaseId: identifier,
-          status: z.string(),
-          type: z.string(),
         }),
       ),
       workflows: z.array(

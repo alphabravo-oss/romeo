@@ -3,7 +3,6 @@ import type { BaseModel, ProviderInstance } from "@romeo/providers";
 
 import type { OrganizationCapabilityFlag } from "../domain/capability-flags";
 import type { ContentPolicySeedData } from "../domain/content-policy";
-import type { DelegatedOAuthConnection } from "../domain/delegated-oauth";
 import type {
   Agent,
   AgentKnowledgeBinding,
@@ -29,8 +28,6 @@ import type {
   CollaborationChannel,
   CollaborationChannelMember,
   ContentDeletionOperation,
-  DataConnector,
-  DataConnectorSync,
   DeviceAuthorization,
   EvalCase,
   EvalResultHumanRating,
@@ -84,6 +81,15 @@ import type {
 } from "../domain/entities";
 import type { IdempotencyReceipt } from "../domain/idempotency";
 
+/**
+ * In-memory mirror of the nullable `source` column on `group_memberships` and
+ * `resource_grants`, kept beside the rows so read models never expose it.
+ */
+export interface InMemoryMembershipSource {
+  key: string;
+  source: string;
+}
+
 export interface SeedData extends ContentPolicySeedData {
   organizations: Organization[];
   workspaces: Workspace[];
@@ -134,9 +140,6 @@ export interface SeedData extends ContentPolicySeedData {
   knowledgeSources: KnowledgeSource[];
   knowledgeChunks: KnowledgeChunk[];
   knowledgeChunkEmbeddings: KnowledgeChunkEmbedding[];
-  dataConnectors: DataConnector[];
-  dataConnectorSyncs: DataConnectorSync[];
-  delegatedOAuthConnections: DelegatedOAuthConnection[];
   voiceProfiles: VoiceProfile[];
   auditLogs: AuditLog[];
   auditIntegrityRecords: AuditIntegrityRecord[];
@@ -165,6 +168,7 @@ export interface SeedData extends ContentPolicySeedData {
   toolConnectors: ToolConnector[];
   toolOperations: ToolOperation[];
   grants: ResourceGrant[];
+  membershipSources?: InMemoryMembershipSource[];
   promptTemplates: PromptTemplate[];
   resourceFavorites: ResourceFavorite[];
   workspaceFolders: WorkspaceFolder[];

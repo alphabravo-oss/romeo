@@ -44,34 +44,6 @@ export async function provisionExternalUser(
   });
 }
 
-export async function syncExternalGroupMemberships(
-  repository: RomeoRepository,
-  input: { groupIds: string[]; orgId: string; userId: string },
-): Promise<void> {
-  const groupIds = [...new Set(input.groupIds)];
-  if (groupIds.length === 0) return;
-  const [groups, memberships] = await Promise.all([
-    repository.listGroups(input.orgId),
-    repository.listGroupMemberships(input.orgId, undefined, input.userId),
-  ]);
-  const existingGroupIds = new Set(groups.map((group) => group.id));
-  const existingMemberships = new Set(
-    memberships.map((membership) => membership.groupId),
-  );
-  const now = new Date().toISOString();
-  for (const groupId of groupIds) {
-    if (!existingGroupIds.has(groupId) || existingMemberships.has(groupId)) {
-      continue;
-    }
-    await repository.createGroupMembership({
-      groupId,
-      userId: input.userId,
-      orgId: input.orgId,
-      createdAt: now,
-    });
-  }
-}
-
 async function assertEmailDoesNotRequireAccountLinking(
   repository: RomeoRepository,
   input: {

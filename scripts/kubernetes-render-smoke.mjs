@@ -140,16 +140,8 @@ const variants = [
       "workers.browserAutomation.networkPolicy.enabled=true",
       "--set-json",
       `workers.browserAutomation.networkPolicy.egress=${sentinelEgress}`,
-      "--set",
-      "evidenceMount.enabled=true",
-      "--set-string",
-      "evidenceMount.configMapName=romeo-evidence",
       "--set-string",
       "env.VECTOR_ISOLATION_MODE=pgvector_partitioned_by_org",
-      "--set-string",
-      "env.PGVECTOR_PHYSICAL_ISOLATION_EVIDENCE_PATH=/var/run/romeo/evidence/pgvector-isolation.json",
-      "--set-string",
-      "env.QDRANT_LIVE_EVIDENCE_PATH=/var/run/romeo/evidence/qdrant-live.json",
       "--set-string",
       "env.VAULT_ADDR=https://vault.example.com",
       "--set-string",
@@ -187,14 +179,6 @@ const variants = [
     expectedToolDispatchPayloadSecret: "romeo-tool-dispatch-payloads",
     expectedToolDispatchSecretResolver: "cloud",
     expectedVectorIsolationMode: "pgvector_partitioned_by_org",
-    expectedPgvectorEvidencePath:
-      "/var/run/romeo/evidence/pgvector-isolation.json",
-    expectedQdrantEvidencePath: "/var/run/romeo/evidence/qdrant-live.json",
-    expectedEvidenceMount: {
-      name: "romeo-evidence",
-      mountPath: "/var/run/romeo/evidence",
-      configMapName: "romeo-evidence",
-    },
     expectedBackup: true,
     expectedHpa: true,
     expectedIngress: true,
@@ -240,12 +224,10 @@ assertHelmSchemaRejectsInvalidRealtimeEvents();
 assertHelmSchemaRejectsInvalidEdgeSecurity();
 assertHelmSchemaRejectsInvalidFileLimits();
 assertHelmSchemaRejectsInvalidHttpRateLimit();
-assertHelmSchemaRejectsInvalidDataConnectorRetry();
 assertHelmSchemaRejectsInvalidVectorIsolation();
 assertHelmSchemaRejectsInvalidBackupUploadTimeout();
 assertHelmSchemaRejectsInvalidToolDispatchBounds();
 assertHelmSchemaRejectsInvalidToolDispatchSecretResolver();
-assertHelmRejectsInvalidEvidenceMount();
 
 const evidence = {
   schemaVersion: "romeo.kubernetes-render-smoke.v1",
@@ -264,7 +246,6 @@ const evidence = {
     "helm_values_schema_rejects_invalid_edge_security",
     "helm_values_schema_rejects_invalid_file_limits",
     "helm_values_schema_rejects_invalid_http_rate_limit",
-    "helm_values_schema_rejects_invalid_data_connector_retry",
     "helm_values_schema_rejects_invalid_vector_isolation",
     "helm_values_schema_rejects_invalid_backup_upload_timeout",
     "helm_values_schema_rejects_invalid_tool_dispatch_bounds",
@@ -681,34 +662,6 @@ function assertHelmSchemaRejectsInvalidHttpRateLimit() {
   }
 }
 
-function assertHelmSchemaRejectsInvalidDataConnectorRetry() {
-  for (const [key, value] of [
-    ["DATA_CONNECTOR_FETCH_RETRY_ATTEMPTS", "6"],
-    ["DATA_CONNECTOR_FETCH_RETRY_BACKOFF_MS", "60001"],
-  ]) {
-    const result = spawnSync(
-      "helm",
-      [
-        "template",
-        releaseName,
-        chartPath,
-        "--set-string",
-        `env.${key}=${value}`,
-      ],
-      { encoding: "utf8" },
-    );
-    if (result.status === 0) {
-      throw new Error(`Helm schema accepted invalid env.${key}=${value}.`);
-    }
-    const text = `${result.stdout}\n${result.stderr}`;
-    if (!text.includes(key) && !text.includes(`/env/${key}`)) {
-      throw new Error(
-        `Helm schema rejected invalid values without naming ${key}: ${text}`,
-      );
-    }
-  }
-}
-
 function assertHelmSchemaRejectsInvalidVectorIsolation() {
   for (const [key, value] of [["VECTOR_ISOLATION_MODE", "tenant_database"]]) {
     const result = spawnSync(
@@ -807,55 +760,6 @@ function assertHelmSchemaRejectsInvalidToolDispatchSecretResolver() {
     throw new Error(
       `Helm schema rejected invalid values without naming workers.toolDispatch.secretResolverDriver: ${text}`,
     );
-  }
-}
-
-function assertHelmRejectsInvalidEvidenceMount() {
-  for (const scenario of [
-    {
-      label: "missing source",
-      args: ["--set", "evidenceMount.enabled=true"],
-      expected: "evidenceMount.enabled requires",
-    },
-    {
-      label: "multiple sources",
-      args: [
-        "--set",
-        "evidenceMount.enabled=true",
-        "--set-string",
-        "evidenceMount.configMapName=romeo-evidence",
-        "--set-string",
-        "evidenceMount.secretName=romeo-evidence",
-      ],
-      expected: "evidenceMount supports exactly one",
-    },
-    {
-      label: "relative path",
-      args: [
-        "--set",
-        "evidenceMount.enabled=true",
-        "--set-string",
-        "evidenceMount.configMapName=romeo-evidence",
-        "--set-string",
-        "evidenceMount.mountPath=relative",
-      ],
-      expected: "evidenceMount.mountPath",
-    },
-  ]) {
-    const result = spawnSync(
-      "helm",
-      ["template", releaseName, chartPath, ...scenario.args],
-      { encoding: "utf8" },
-    );
-    if (result.status === 0) {
-      throw new Error(`Helm accepted invalid evidenceMount ${scenario.label}.`);
-    }
-    const text = `${result.stdout}\n${result.stderr}`;
-    if (!text.includes(scenario.expected) && !text.includes("evidenceMount")) {
-      throw new Error(
-        `Helm rejected invalid evidenceMount ${scenario.label} without naming the field: ${text}`,
-      );
-    }
   }
 }
 
@@ -1056,18 +960,6 @@ function assertConfigMap(configMap, variant) {
   if (data.VECTOR_ISOLATION_MODE !== expectedVectorIsolationMode) {
     throw new Error(`${variantName} ConfigMap vector isolation mode drifted.`);
   }
-  const expectedPgvectorEvidencePath =
-    variant.expectedPgvectorEvidencePath ?? "";
-  if (
-    data.PGVECTOR_PHYSICAL_ISOLATION_EVIDENCE_PATH !==
-    expectedPgvectorEvidencePath
-  ) {
-    throw new Error(`${variantName} ConfigMap pgvector evidence path drifted.`);
-  }
-  const expectedQdrantEvidencePath = variant.expectedQdrantEvidencePath ?? "";
-  if (data.QDRANT_LIVE_EVIDENCE_PATH !== expectedQdrantEvidencePath) {
-    throw new Error(`${variantName} ConfigMap Qdrant evidence path drifted.`);
-  }
   for (const key of [
     "DATABASE_URL",
     "VALKEY_URL",
@@ -1079,8 +971,6 @@ function assertConfigMap(configMap, variant) {
     "S3_ACCESS_KEY_ID",
     "S3_SECRET_ACCESS_KEY",
     "ROMEO_API_KEY",
-    "DELEGATED_OAUTH_GITHUB_CLIENT_SECRET",
-    "DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY",
   ]) {
     if (Object.hasOwn(data, key)) {
       throw new Error(
@@ -1191,23 +1081,6 @@ function assertDeployment(deployment, variant) {
       variant.expectedValkeySecret,
       variant.name,
     );
-  }
-  if (variant.expectedEvidenceMount !== undefined) {
-    const expected = variant.expectedEvidenceMount;
-    const volume = podSpec.volumes?.find((item) => item.name === expected.name);
-    if (volume?.configMap?.name !== expected.configMapName) {
-      throw new Error(
-        `${variant.name} app evidence volume is not ConfigMap-backed as expected.`,
-      );
-    }
-    const mount = container.volumeMounts?.find(
-      (item) => item.name === expected.name,
-    );
-    if (mount?.mountPath !== expected.mountPath || mount.readOnly !== true) {
-      throw new Error(
-        `${variant.name} app evidence mount is not read-only at ${expected.mountPath}.`,
-      );
-    }
   }
   if (variant.expectedScheduledEvidenceConfigMap !== undefined) {
     const volume = podSpec.volumes?.find(
