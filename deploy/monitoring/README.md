@@ -51,15 +51,3 @@ pnpm validate:operational-monitoring -- --output dist/ci/operational-monitoring-
 ```
 
 This validation parses the example manifests, renders synthetic provider/job summaries into Prometheus text, checks alert expressions against real metric names, and proves raw sentinel fields are not emitted.
-
-After forcing the selected provider, queue-lag, dead-letter, and backup-failure drills in the live monitoring stack, collect GA alert-firing evidence with:
-
-```sh
-PROMETHEUS_URL="https://prometheus.example.com" \
-PROMETHEUS_BEARER_TOKEN="$PROMETHEUS_BEARER_TOKEN" \
-ALERTMANAGER_URL="https://alertmanager.example.com" \
-ALERTMANAGER_BEARER_TOKEN="$ALERTMANAGER_BEARER_TOKEN" \
-pnpm smoke:alerts:live -- --output dist/ci/live-alert-firing.json
-```
-
-Omit `ALERTMANAGER_URL` only when the target monitoring stack does not use Alertmanager. Dry-run output is planning evidence only and is rejected by the GA checklist.

@@ -10,3 +10,8 @@ f3250b0a72597d547cca59c4f3fb5fc48277d8d3:docs/backlog/enterprise-operations.md:g
 f3250b0a72597d547cca59c4f3fb5fc48277d8d3:docs/backlog/phase-execution-matrix.md:generic-api-key:17
 f3250b0a72597d547cca59c4f3fb5fc48277d8d3:packages/core/src/quota.test.ts:generic-api-key:1228
 f3250b0a72597d547cca59c4f3fb5fc48277d8d3:packages/core/src/quota.test.ts:generic-api-key:1380
+9224b720ae2065b12ba9322d5f1a7a37507fff95:packages/config/src/index.test.ts:generic-api-key:247
+9224b720ae2065b12ba9322d5f1a7a37507fff95:packages/config/src/index.test.ts:generic-api-key:260
+9224b720ae2065b12ba9322d5f1a7a37507fff95:packages/config/src/index.test.ts:generic-api-key:266
+d3189ad4e94aaea1a2253f0e678582707e1d2fc1:docs/audits/2026-08-13-enterprise-deep-audit.md:generic-api-key:579
+d3189ad4e94aaea1a2253f0e678582707e1d2fc1:packages/core/src/services/secret-envelope-binding.test.ts:generic-api-key:25

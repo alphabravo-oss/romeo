@@ -18,7 +18,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@hono/zod-openapi": "^1.4.0",
+    "@hono/zod-openapi": "^1.6.3",
     "@romeo/auth": "workspace:*",
     "zod": "^4.4.3"
   },
