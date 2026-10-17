@@ -184,5 +184,7 @@
   "reasoningAdjustedSummaryUnavailable": "La persistance du résumé de raisonnement n’est pas disponible.",
   "reasoningAdjustedDialectUnsupported": "Le protocole du fournisseur ne prend pas en charge ce réglage.",
   "reasoningAdjustedModelUnsupported": "Le modèle ou le fournisseur sélectionné ne prend pas en charge ce réglage.",
-  "turnRequiresCapabilities": "Ce tour nécessite : {{capabilities}}."
+  "turnRequiresCapabilities": "Ce tour nécessite : {{capabilities}}.",
+  "markdownRemoteImageLoad": "Charger l’image",
+  "markdownRemoteImageBlocked": "Image externe non chargée :"
 }

@@ -403,3 +403,29 @@ html.dark .rm-codeblock .hljs {
     background-position: -200% 0;
   }
 }
+
+/* Markdown images: same-origin images render inline; remote ones wait for an
+ * explicit click so model output cannot beacon data out on render. */
+.rm-markdown .rm-markdown-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+}
+
+.rm-markdown .rm-markdown-image-blocked {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 100%;
+  padding: 0.35rem 0.6rem;
+  border: 1px dashed var(--rm-border);
+  color: var(--rm-muted);
+  border-radius: 0.5rem;
+  overflow-wrap: anywhere;
+}
+
+.rm-markdown .rm-markdown-image-host {
+  font-family: var(--rm-font-mono);
+  color: var(--rm-text);
+}

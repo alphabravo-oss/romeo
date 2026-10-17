@@ -1,4 +1,5 @@
 import type { RomeoApi } from "../context";
+import { fileContentHeaders } from "../file-content-headers";
 import type { AuthSubject } from "@romeo/auth";
 import type { RomeoServices } from "../../services";
 import {
@@ -357,13 +358,11 @@ export function registerChatRoutes(app: RomeoApi): void {
       attachmentId: params.attachmentId,
     });
     return new Response(toArrayBuffer(attachment.bytes), {
-      headers: {
-        "cache-control": "private, max-age=300",
-        "content-disposition": `inline; filename="${attachment.fileName.replace(/"/gu, "")}"`,
-        "content-length": String(attachment.bytes.byteLength),
-        "content-type": attachment.mimeType,
-        "x-content-type-options": "nosniff",
-      },
+      headers: fileContentHeaders({
+        fileName: attachment.fileName,
+        mimeType: attachment.mimeType,
+        sizeBytes: attachment.bytes.byteLength,
+      }),
     });
   });
 

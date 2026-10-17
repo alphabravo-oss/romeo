@@ -32,6 +32,7 @@ import {
   type MarkdownSegmentation,
 } from "./markdown-segments";
 import { downloadText } from "./download";
+import { MarkdownImage } from "./markdown-image";
 import type { ChatCitation } from "./run-registry";
 import { toast } from "./toast";
 import { MermaidPreview } from "../components/MermaidPreview";
@@ -361,6 +362,7 @@ const MarkdownDocument = memo(function MarkdownDocument({
           </a>
         );
       },
+      img: ({ alt, src }) => <MarkdownImage alt={alt} src={src} />,
       pre: ({ children, node }) => {
         const codeElement = Array.isArray(children) ? children[0] : children;
         const className =
