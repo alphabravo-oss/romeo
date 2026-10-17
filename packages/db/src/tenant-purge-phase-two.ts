@@ -8,9 +8,6 @@ import {
   collaborationChannels,
   contentPolicyApprovals,
   contentPolicyDecisions,
-  dataConnectors,
-  dataConnectorSyncs,
-  delegatedOAuthConnections,
   deviceAuthorizations,
   evalSuites,
   groupMemberships,
@@ -85,13 +82,6 @@ export async function purgeTenantPhaseTwo({
   await deleteWhere(
     database,
     counts,
-    "data_connector_syncs",
-    dataConnectorSyncs,
-    eq(dataConnectorSyncs.orgId, orgId),
-  );
-  await deleteWhere(
-    database,
-    counts,
     "device_authorizations",
     deviceAuthorizations,
     eq(deviceAuthorizations.orgId, orgId),
@@ -141,13 +131,6 @@ export async function purgeTenantPhaseTwo({
   await deleteWhere(
     database,
     counts,
-    "delegated_oauth_connections",
-    delegatedOAuthConnections,
-    eq(delegatedOAuthConnections.orgId, orgId),
-  );
-  await deleteWhere(
-    database,
-    counts,
     "collaboration_channels",
     collaborationChannels,
     eq(collaborationChannels.orgId, orgId),
@@ -179,13 +162,6 @@ export async function purgeTenantPhaseTwo({
     "workflow_definitions",
     workflowDefinitions,
     eq(workflowDefinitions.orgId, orgId),
-  );
-  await deleteWhere(
-    database,
-    counts,
-    "data_connectors",
-    dataConnectors,
-    eq(dataConnectors.orgId, orgId),
   );
   await deleteWhere(
     database,

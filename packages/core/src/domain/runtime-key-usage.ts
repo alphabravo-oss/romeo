@@ -33,16 +33,6 @@ export function emptyRuntimeKeyUsageCounts(): RuntimeKeyUsageCounts {
   };
 }
 
-export function classifyDelegatedOAuthTokenEnvelope(
-  value: unknown,
-  query: Omit<RuntimeKeyUsageQuery, "orgId">,
-): RuntimeKeyUsageClassification {
-  if (!isRecord(value) || !validEnvelopeFields(value)) return "corrupt";
-  if (value.v === 1 || value.v === 2) return "legacyUnversioned";
-  if (value.v !== 3 || !isRuntimeKeyVersion(value.keyVersion)) return "corrupt";
-  return classifyVersion(value.keyVersion, query);
-}
-
 export function classifyWebhookSigningKeyVersion(
   value: unknown,
   query: Omit<RuntimeKeyUsageQuery, "orgId">,
@@ -71,22 +61,4 @@ function classifyVersion(
   if (version === query.activeVersion) return "active";
   if (version === query.previousVersion) return "previous";
   return "unknown";
-}
-
-function validEnvelopeFields(value: Record<string, unknown>): boolean {
-  return (
-    value.alg === "A256GCM" &&
-    typeof value.iv === "string" &&
-    value.iv.length > 0 &&
-    typeof value.ciphertext === "string" &&
-    value.ciphertext.length > 0 &&
-    typeof value.tag === "string" &&
-    value.tag.length > 0 &&
-    typeof value.createdAt === "string" &&
-    value.createdAt.length > 0
-  );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

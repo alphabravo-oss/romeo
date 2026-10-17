@@ -259,18 +259,6 @@ OPERATIONS = {
         "path": "/api/v1/admin/content-policy/versions/{versionId}/publish",
         "summary": "Publish a staged or draft content-policy version"
     },
-    "get_admin_data_connectors_posture": {
-        "name": "get_admin_data_connectors_posture",
-        "method": "GET",
-        "path": "/api/v1/admin/data-connectors/posture",
-        "summary": "Get posture"
-    },
-    "get_admin_delegated_oauth_posture": {
-        "name": "get_admin_delegated_oauth_posture",
-        "method": "GET",
-        "path": "/api/v1/admin/delegated-oauth/posture",
-        "summary": "Get sanitized delegated OAuth operational posture"
-    },
     "post_admin_directory_sync": {
         "name": "post_admin_directory_sync",
         "method": "POST",
@@ -1848,66 +1836,6 @@ OPERATIONS = {
         "method": "POST",
         "path": "/api/v1/compute/sandbox/posture",
         "summary": "Evaluate required Kata guest sandbox posture before claim"
-    },
-    "get_data_connectors": {
-        "name": "get_data_connectors",
-        "method": "GET",
-        "path": "/api/v1/data-connectors",
-        "summary": "List"
-    },
-    "post_data_connectors": {
-        "name": "post_data_connectors",
-        "method": "POST",
-        "path": "/api/v1/data-connectors",
-        "summary": "Create"
-    },
-    "get_data_connectors_catalog": {
-        "name": "get_data_connectors_catalog",
-        "method": "GET",
-        "path": "/api/v1/data-connectors/catalog",
-        "summary": "Get catalog"
-    },
-    "post_data_connectors_connectorid_sync": {
-        "name": "post_data_connectors_connectorid_sync",
-        "method": "POST",
-        "path": "/api/v1/data-connectors/{connectorId}/sync",
-        "summary": "Sync"
-    },
-    "get_data_connectors_connectorid_syncs": {
-        "name": "get_data_connectors_connectorid_syncs",
-        "method": "GET",
-        "path": "/api/v1/data-connectors/{connectorId}/syncs",
-        "summary": "List syncs"
-    },
-    "get_delegated_oauth_callback": {
-        "name": "get_delegated_oauth_callback",
-        "method": "GET",
-        "path": "/api/v1/delegated-oauth/callback",
-        "summary": "Receive delegated OAuth provider callback"
-    },
-    "get_delegated_oauth_connections": {
-        "name": "get_delegated_oauth_connections",
-        "method": "GET",
-        "path": "/api/v1/delegated-oauth/connections",
-        "summary": "List delegated OAuth connector account links"
-    },
-    "post_delegated_oauth_connections_connectionid_revoke": {
-        "name": "post_delegated_oauth_connections_connectionid_revoke",
-        "method": "POST",
-        "path": "/api/v1/delegated-oauth/connections/{connectionId}/revoke",
-        "summary": "Revoke a delegated OAuth connector account link"
-    },
-    "get_delegated_oauth_providers": {
-        "name": "get_delegated_oauth_providers",
-        "method": "GET",
-        "path": "/api/v1/delegated-oauth/providers",
-        "summary": "List delegated OAuth providers available for connectors"
-    },
-    "post_delegated_oauth_start": {
-        "name": "post_delegated_oauth_start",
-        "method": "POST",
-        "path": "/api/v1/delegated-oauth/start",
-        "summary": "Start a delegated OAuth connector authorization flow"
     },
     "get_device_authorizations": {
         "name": "get_device_authorizations",

@@ -8,9 +8,7 @@ import { PgCapabilityFlagRepository } from "./capability-flag-repository";
 import { PgIdempotencyRepository } from "./idempotency-repository";
 import { PgCollaborationRepository } from "./collaboration-repository";
 export type { ContentPolicyRepositoryFragment } from "./content-policy-repository-fragment";
-import { PgDataConnectorRepository } from "./data-connector-repository";
 import { PgDataDeletionRepository } from "./data-deletion-repository";
-import { PgDelegatedOAuthRepository } from "./delegated-oauth-repository";
 import { PgEvalRepository } from "./eval-repository";
 import { PgFileRepository } from "./file-repository";
 import { PgGovernanceBillingRepository } from "./governance-billing-repository";
@@ -309,30 +307,6 @@ export type ToolConnectorRepositoryFragment = Pick<
   | "listToolOperationsForConnectors"
   | "updateToolConnector"
   | "updateToolOperation"
->;
-
-export type DataConnectorRepositoryFragment = Pick<
-  PgDataConnectorRepository,
-  | "claimDataConnectorSync"
-  | "createDataConnector"
-  | "createDataConnectorSync"
-  | "getDataConnector"
-  | "listDataConnectors"
-  | "listDataConnectorSyncs"
-  | "finishDataConnectorSync"
-  | "renewDataConnectorSyncLease"
-  | "updateDataConnector"
-  | "updateDataConnectorSync"
->;
-
-export type DelegatedOAuthRepositoryFragment = Pick<
-  PgDelegatedOAuthRepository,
-  | "createDelegatedOAuthConnection"
-  | "countDelegatedOAuthTokenKeyUsage"
-  | "getDelegatedOAuthConnection"
-  | "getDelegatedOAuthConnectionByProviderAccount"
-  | "listDelegatedOAuthConnections"
-  | "updateDelegatedOAuthConnection"
 >;
 
 export type OperationalRepositoryFragment = Pick<

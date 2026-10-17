@@ -7,7 +7,6 @@ import {
   InterfacePreferencesSchema,
   UpdateInterfacePreferencesSchema,
 } from "./interface-preferences";
-import { StartDelegatedOAuthSchema } from "./delegated-oauth";
 import { CreateDeviceAuthorizationSchema } from "./device-authorizations";
 import { EdgeSecurityPostureCheckSchema } from "./edge-security";
 import { LocalLoginSchema, LocalMfaVerifySchema } from "./sessions";
@@ -176,14 +175,6 @@ describe("Romeo HTTP contracts", () => {
         challengeToken: "challenge",
         code: "123456",
         recoveryCode: "rmfa-aaaa-bbbb-cccc-dddd",
-      }).success,
-    ).toBe(false);
-    expect(
-      StartDelegatedOAuthSchema.safeParse({
-        providerId: "github",
-        workspaceId: "workspace_1",
-        connectorType: "github",
-        uncontracted: true,
       }).success,
     ).toBe(false);
     expect(

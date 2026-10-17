@@ -10,7 +10,7 @@ import {
   assertConnectorHostAllowed,
   type WebsiteConnectorHostAddress,
   type WebsiteConnectorHostLookup,
-} from "./data-connector-network-policy";
+} from "./outbound-network-policy";
 import { resolveOAuthClientCredentialsAccessToken } from "./tool-oauth-client-credentials";
 import type { DispatchToolOperationInput } from "./tool-operation-dispatch-types";
 import {
@@ -199,7 +199,7 @@ function assertHostAllowed(connector: ToolConnector, url: URL): void {
  * The allowlist above only compares hostname strings, so an allowlisted name
  * whose DNS answers 169.254.169.254 or 127.0.0.1 used to be fetched with the
  * connector's injected auth headers. This applies the same private-network and
- * pinning checks the data-connector path already uses, closing both the
+ * pinning checks the governed web fetch path already uses, closing both the
  * literal private host case and the rebind between check and connect.
  */
 async function resolveDispatchAddresses(

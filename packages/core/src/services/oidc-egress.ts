@@ -6,7 +6,7 @@ import {
   lookupNetworkHost,
   type WebsiteConnectorHostAddress,
   type WebsiteConnectorHostLookup,
-} from "./data-connector-network-policy";
+} from "./outbound-network-policy";
 import { dnsPinnedFetch, type DnsPinnedFetch } from "./dns-pinned-fetch";
 import { isPrivateNetworkHost } from "./network-host-policy";
 

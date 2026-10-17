@@ -2247,81 +2247,6 @@ function liveEdgeEvidence(overrides: Record<string, unknown> = {}) {
   };
 }
 
-const dataConnectorLiveRequiredChecks = [
-  "managed_connector_sync_exercised",
-  "worker_cni_egress_enforced",
-  "dns_private_address_denied",
-  "secret_ref_resolution_verified",
-  "worker_crash_retry_or_requeue_verified",
-  "sync_log_redaction",
-  "sanitized_readback_verified",
-] as const;
-
-function dataConnectorLiveEvidence(overrides: Record<string, unknown> = {}) {
-  return {
-    schemaVersion: "romeo.data-connector-live-evidence.v1",
-    status: "passed",
-    mode: "live",
-    deployment: "kubernetes",
-    generatedAt: "2026-01-01T00:00:00.000Z",
-    checks: [...dataConnectorLiveRequiredChecks],
-    connectors: {
-      managedConnectorTypeCount: 2,
-      syncAttemptCount: 3,
-      successfulSyncCount: 2,
-      failedSyncCount: 0,
-      secretRefConnectorCount: 1,
-      delegatedOAuthConnectorCount: 1,
-      deniedPrivateTargetCount: 1,
-    },
-    egress: {
-      workerCniOrNetworkPolicyEnforced: true,
-      allowlistRequired: true,
-      privateNetworkDenied: true,
-      dnsRebindingDenied: true,
-      deniedPrivateNetworkCount: 1,
-      allowedExternalHostCount: 1,
-    },
-    secrets: {
-      secretRefResolutionVerified: true,
-      secretResolverBoundaryVerified: true,
-      rawSecretValuesReturned: false,
-      tokenValuesReturned: false,
-    },
-    worker: {
-      workerExecutionVerified: true,
-      crashRetryOrRequeueVerified: true,
-      requeuedSyncCount: 1,
-      completedAfterRetry: true,
-    },
-    logRedaction: {
-      syncLogRedactionVerified: true,
-      podLogRedactionVerified: true,
-      podLogScanCount: 2,
-      workerLogScanCount: 2,
-      connectorContentSentinelHitCount: 0,
-      secretSentinelHitCount: 0,
-      tokenSentinelHitCount: 0,
-    },
-    readback: {
-      adminPostureReadbackVerified: true,
-      syncHistoryReadbackVerified: true,
-    },
-    redaction: {
-      rawAllowedHostsReturned: false,
-      rawConnectorConfigReturned: false,
-      rawConnectorContentReturned: false,
-      rawEndpointUrlsReturned: false,
-      rawEvidencePathsReturned: false,
-      rawLogLinesReturned: false,
-      rawSecretRefsReturned: false,
-      secretValuesReturned: false,
-      tokenValuesReturned: false,
-    },
-    ...overrides,
-  };
-}
-
 describe("Romeo API thin slice", () => {
   it("serves health and the Milestone 1 OpenAPI document", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository());
@@ -2486,8 +2411,6 @@ describe("Romeo API thin slice", () => {
     expect(
       spec.components.schemas.BrowserAutomationPostureReport,
     ).toBeDefined();
-    expect(Object.keys(spec.paths)).toContain("/admin/data-connectors/posture");
-    expect(spec.components.schemas.DataConnectorPostureReport).toBeDefined();
     expect(
       spec.paths["/agents/{agentId}"].get.responses[200].content[
         "application/json"
@@ -2652,20 +2575,6 @@ describe("Romeo API thin slice", () => {
       "/workspaces/{workspaceId}/export",
     );
     expect(spec.paths["/workspaces"].post).toBeDefined();
-    expect(Object.keys(spec.paths)).toContain("/data-connectors");
-    expect(Object.keys(spec.paths)).toContain("/delegated-oauth/providers");
-    expect(Object.keys(spec.paths)).toContain("/delegated-oauth/start");
-    expect(Object.keys(spec.paths)).toContain("/delegated-oauth/connections");
-    expect(Object.keys(spec.paths)).toContain(
-      "/delegated-oauth/connections/{connectionId}/revoke",
-    );
-    expect(Object.keys(spec.paths)).toContain("/delegated-oauth/callback");
-    expect(Object.keys(spec.paths)).toContain(
-      "/data-connectors/{connectorId}/sync",
-    );
-    expect(Object.keys(spec.paths)).toContain(
-      "/data-connectors/{connectorId}/syncs",
-    );
     expect(Object.keys(spec.paths)).toContain("/agents/{agentId}/tools");
     expect(Object.keys(spec.paths)).toContain(
       "/agents/{agentId}/tools/{toolId}",
@@ -3108,11 +3017,6 @@ describe("Romeo API thin slice", () => {
       spec.paths["/admin/browser-automation/posture"].get.responses[200]
         .content["application/json"].schema.properties.data.$ref,
     ).toBe("#/components/schemas/BrowserAutomationPostureReport");
-    expect(
-      spec.paths["/admin/data-connectors/posture"].get.responses[200].content[
-        "application/json"
-      ].schema.properties.data.$ref,
-    ).toBe("#/components/schemas/DataConnectorPostureReport");
     expect(
       spec.paths["/browser-automation-tasks/claim"].post.responses[200].content[
         "application/json"
@@ -3725,158 +3629,6 @@ describe("Romeo API thin slice", () => {
     }
   });
 
-  it("reports data connector live posture without leaking connector evidence details", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "romeo-connector-posture-"));
-    const evidencePath = join(directory, "data-connector-live-evidence.json");
-    const rawEndpoint = "https://confluence.secret.example/wiki";
-    const rawSecretRef = "vault://romeo/connectors/confluence";
-    const rawConnectorContent = "RAW_CONNECTOR_CONTENT_SENTINEL";
-    writeFileSync(
-      evidencePath,
-      JSON.stringify(
-        dataConnectorLiveEvidence({
-          egress: {
-            ...dataConnectorLiveEvidence().egress,
-            approvedEndpointUrl: rawEndpoint,
-          },
-          secrets: {
-            ...dataConnectorLiveEvidence().secrets,
-            secretRef: rawSecretRef,
-          },
-          rawConnectorContent,
-        }),
-      ),
-    );
-    const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: testEnv({
-        DATA_CONNECTOR_EXECUTION_DRIVER: "managed-fetch",
-        DATA_CONNECTOR_EGRESS_POLICY: "require_allowlist",
-        DATA_CONNECTOR_FETCH_ALLOWED_HOSTS: "confluence.secret.example",
-        DATA_CONNECTOR_LIVE_EVIDENCE_PATH: evidencePath,
-        DATA_CONNECTOR_NETWORK_POLICY_ENABLED: "true",
-        DATA_CONNECTOR_WORKER_ENABLED: "true",
-        SECRET_RESOLVER_DRIVER: "env",
-        MANAGED_SECRET_ENCRYPTION_KEY: "managed-secret-key-32-bytes-min",
-      }),
-    });
-
-    const response = await api.request("/api/v1/admin/data-connectors/posture");
-    const body = await response.json();
-    const serialized = JSON.stringify(body);
-
-    expect(response.status).toBe(200);
-    expect(body.data).toMatchObject({
-      schema: "romeo.data-connector-posture.v1",
-      status: "ready",
-      runtime: {
-        executionDriver: "managed-fetch",
-        egressPolicy: "require_allowlist",
-        managedFetchEnabled: true,
-        allowedHostRuleCount: 1,
-      },
-      deployment: {
-        liveEvidencePathConfigured: true,
-        networkPolicyConfigured: true,
-        workerEnabled: true,
-      },
-      liveEvidence: {
-        configured: true,
-        status: "satisfied",
-        evidenceStatus: "passed",
-        mode: "live",
-        deployment: "kubernetes",
-        summary: {
-          managedConnectorTypeCount: 2,
-          secretRefConnectorCount: 1,
-          syncAttemptCount: 3,
-        },
-      },
-      redaction: {
-        evidenceFileBodiesReturned: false,
-        rawAllowedHostsReturned: false,
-        rawConnectorConfigReturned: false,
-        rawConnectorContentReturned: false,
-        rawEndpointUrlsReturned: false,
-        rawEvidencePathsReturned: false,
-        rawSecretRefsReturned: false,
-        secretValuesReturned: false,
-        tokenValuesReturned: false,
-      },
-      warnings: [],
-    });
-    expect(body.data.connectors.total).toBe(0);
-    expect(body.data.syncs.total).toBe(0);
-    expect(serialized).not.toContain(evidencePath);
-    expect(serialized).not.toContain("confluence.secret.example");
-    expect(serialized).not.toContain(rawEndpoint);
-    expect(serialized).not.toContain(rawSecretRef);
-    expect(serialized).not.toContain(rawConnectorContent);
-  });
-
-  it("rejects data connector live posture evidence that fails GA-aligned worker-boundary proofs", async () => {
-    const directory = mkdtempSync(
-      join(tmpdir(), "romeo-connector-posture-negative-"),
-    );
-    const baseEvidence = dataConnectorLiveEvidence();
-    const cases = [
-      {
-        name: "deployment",
-        evidence: dataConnectorLiveEvidence({ deployment: "compose" }),
-        failureCode: "data_connector_live_deployment_invalid",
-      },
-      {
-        name: "egress",
-        evidence: dataConnectorLiveEvidence({
-          egress: {
-            ...baseEvidence.egress,
-            workerCniOrNetworkPolicyEnforced: false,
-          },
-        }),
-        failureCode: "data_connector_live_egress_invalid",
-      },
-      {
-        name: "readback",
-        evidence: dataConnectorLiveEvidence({
-          readback: {
-            ...baseEvidence.readback,
-            adminPostureReadbackVerified: false,
-          },
-        }),
-        failureCode: "data_connector_live_readback_invalid",
-      },
-    ];
-
-    for (const item of cases) {
-      const evidencePath = join(directory, `${item.name}.json`);
-      writeFileSync(evidencePath, JSON.stringify(item.evidence));
-      const api = createRomeoApi(new InMemoryRomeoRepository(), {
-        env: testEnv({
-          DATA_CONNECTOR_EXECUTION_DRIVER: "managed-fetch",
-          DATA_CONNECTOR_EGRESS_POLICY: "require_allowlist",
-          DATA_CONNECTOR_FETCH_ALLOWED_HOSTS: "confluence.secret.example",
-          DATA_CONNECTOR_LIVE_EVIDENCE_PATH: evidencePath,
-          DATA_CONNECTOR_NETWORK_POLICY_ENABLED: "true",
-          DATA_CONNECTOR_WORKER_ENABLED: "true",
-          SECRET_RESOLVER_DRIVER: "env",
-          MANAGED_SECRET_ENCRYPTION_KEY: "managed-secret-key-32-bytes-min",
-        }),
-      });
-
-      const response = await api.request(
-        "/api/v1/admin/data-connectors/posture",
-      );
-      const body = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(body.data.status).toBe("attention_required");
-      expect(body.data.liveEvidence.status).toBe("failed");
-      expect(body.data.liveEvidence.failureCodes).toContain(item.failureCode);
-      expect(body.data.warnings).toContain(
-        "data_connector_live_evidence_invalid",
-      );
-    }
-  });
-
   it("does not report browser automation ready for a non-HTTPS runner URL", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
       env: testEnv({
@@ -3942,8 +3694,8 @@ describe("Romeo API thin slice", () => {
         usernameReturned: false,
       },
     });
-    expect(body.data.queryPlanReview.reviewedPathCount).toBe(19);
-    expect(body.data.queryPlanReview.requiredIndexCount).toBe(20);
+    expect(body.data.queryPlanReview.reviewedPathCount).toBe(17);
+    expect(body.data.queryPlanReview.requiredIndexCount).toBe(18);
     expect(body.data.queryPlanReview.categories).toContain("retrieval");
     expect(body.data.queryPlanReview.categories).toContain("billing");
     expect(body.data.warnings).toContain(
@@ -8242,7 +7994,7 @@ describe("Romeo API thin slice", () => {
       createdAt: new Date().toISOString(),
     });
     const api = createRomeoApi(repository, {
-      delegatedOAuthFetch: githubFetch,
+      oauth2ProviderFetch: githubFetch,
       env,
       secretResolver: new EnvironmentSecretResolver({
         GITHUB_CLIENT_SECRET: rawSecret,

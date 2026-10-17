@@ -204,7 +204,7 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
       {{- fail "imagePolicyException.reason must document the development-only exception (minimum 16 characters)" -}}
     {{- end -}}
   {{- end -}}
-  {{- $opsEnabled := or .Values.migration.enabled .Values.backup.enabled .Values.workers.dataConnectorSync.enabled .Values.workers.webhookRetry.enabled .Values.workers.notificationRetry.enabled .Values.workers.retentionEnforce.enabled .Values.workers.billingEntitlementReconcile.enabled .Values.workers.billingLifecycleEnforce.enabled .Values.workers.toolDispatch.enabled .Values.workers.browserAutomation.enabled .Values.workers.knowledgeExtraction.enabled .Values.workers.voiceCatalogSync.enabled -}}
+  {{- $opsEnabled := or .Values.migration.enabled .Values.backup.enabled .Values.workers.webhookRetry.enabled .Values.workers.notificationRetry.enabled .Values.workers.retentionEnforce.enabled .Values.workers.billingEntitlementReconcile.enabled .Values.workers.billingLifecycleEnforce.enabled .Values.workers.toolDispatch.enabled .Values.workers.browserAutomation.enabled .Values.workers.knowledgeExtraction.enabled .Values.workers.voiceCatalogSync.enabled -}}
   {{- if and $opsEnabled (not (regexMatch "^sha256:[a-fA-F0-9]{64}$" .Values.opsImage.digest)) -}}
     {{- fail "production operational workloads require opsImage.digest (sha256)" -}}
   {{- end -}}
@@ -238,7 +238,7 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
       {{- fail "externally-managed backups require alerting" -}}
     {{- end -}}
   {{- end -}}
-  {{- $retiredWorkers := list .Values.workers.dataConnectorSync.enabled .Values.workers.webhookRetry.enabled .Values.workers.notificationRetry.enabled .Values.workers.retentionEnforce.enabled .Values.workers.billingEntitlementReconcile.enabled .Values.workers.billingLifecycleEnforce.enabled .Values.workers.voiceCatalogSync.enabled -}}
+  {{- $retiredWorkers := list .Values.workers.webhookRetry.enabled .Values.workers.notificationRetry.enabled .Values.workers.retentionEnforce.enabled .Values.workers.billingEntitlementReconcile.enabled .Values.workers.billingLifecycleEnforce.enabled .Values.workers.voiceCatalogSync.enabled -}}
   {{- range $retiredWorkers -}}
     {{- if . -}}
       {{- fail "production forbids tenant-token scheduled CronJobs now owned by the all-tenant scheduled-work coordinator" -}}
@@ -414,10 +414,6 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
   "POSTGRES_BACKUP_MANIFEST_READBACK_URL"
   "POSTGRES_BACKUP_STATUS_UPLOAD_URL"
   "POSTGRES_BACKUP_STATUS_READBACK_URL"
-  "DATA_CONNECTOR_GITHUB_TOKEN"
-  "DELEGATED_OAUTH_GITHUB_CLIENT_SECRET"
-  "DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY"
-  "DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY_PREVIOUS"
   "TOOL_DISPATCH_PAYLOAD_ENCRYPTION_KEY"
   "QDRANT_API_KEY_REF"
   | toJson -}}

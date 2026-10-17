@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { WebsiteConnectorHostAddress } from "./data-connector-network-policy";
+import type { WebsiteConnectorHostAddress } from "./outbound-network-policy";
 import {
   SecretBearingEgressClient,
   SecretBearingEgressError,

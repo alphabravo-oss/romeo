@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "baseline": {
     "path": "docs/api/openapi-baseline.json",
-    "sha256": "57c984218c9b0be18d2550b1fc330be03d5618133791b4d2c61fa637d4f567e6"
+    "sha256": "a345866dfb1e59664c34211e497d3f651a470e91c285a4f46593933b429004a5"
   },
   "breakingChanges": [
     {

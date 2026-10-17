@@ -17,8 +17,6 @@ export * from "./collaboration";
 export * from "./collaboration-routes";
 export * from "./content-policy";
 export * from "./content-policy-lifecycle";
-export * from "./data-connectors";
-export * from "./delegated-oauth";
 export * from "./device-authorizations";
 export * from "./edge-security";
 export * from "./enterprise-surfaces";

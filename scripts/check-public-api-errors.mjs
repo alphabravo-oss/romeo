@@ -34,7 +34,6 @@ if (failures.length > 0) {
 
 function validateRegistry() {
   const approvedMultiStatus = new Map([
-    ["delegated_oauth_scope_invalid", [400, 401]],
     ["knowledge_retrieval_plan_empty", [400, 403]],
     ["managed_secret_external_write_failed", [502, 400, 403, 409]],
     ["saml_request_state_invalid", [400, 401]],

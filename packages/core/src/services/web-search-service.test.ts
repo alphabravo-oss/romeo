@@ -2,7 +2,7 @@ import { scopeValues, type AuthSubject } from "@romeo/auth";
 import { describe, expect, it, vi } from "vitest";
 
 import { InMemoryRomeoRepository } from "../repositories/in-memory";
-import { assertConnectorHostAllowed } from "./data-connector-executors";
+import { assertConnectorHostAllowed } from "./outbound-network-policy";
 import { EnvironmentSecretResolver } from "./secret-resolver";
 import { WebSearchService } from "./web-search-service";
 

@@ -74,41 +74,36 @@ The same SDK-first rule applies beyond model providers. Dependencies are added
 when their adapter is migrated; Romeo does not carry speculative or unused
 SDKs.
 
-| Integration                                          | Qualified package                  | Status  | Romeo-owned boundary                                      |
-| ---------------------------------------------------- | ---------------------------------- | ------- | --------------------------------------------------------- |
-| Stripe webhooks and billing API                      | `stripe`                           | Adopted | entitlement mapping, tenant policy, audit                 |
-| Amazon S3 connectors and object storage              | `@aws-sdk/client-s3`               | Adopted | object limits, tenant prefix policy, redaction            |
-| GitHub connectors, identity, diagnostics, revocation | `octokit`                          | Adopted | scope policy, membership mapping, content limits, audit   |
-| Slack connectors                                     | `@slack/web-api`                   | Adopted | channel allowlists, retention, content normalization      |
-| Slack incoming-webhook notifications                 | `@slack/webhook`                   | Adopted | destination policy, delivery ledger, content redaction    |
-| Resend email notifications                           | `resend`                           | Adopted | recipient policy, templates, delivery ledger, redaction   |
-| Firebase Cloud Messaging                             | `firebase-admin`                   | Adopted | token refs, message policy, delivery ledger, redaction    |
-| Qdrant vector storage                                | `@qdrant/js-client-rest`           | Adopted | tenant filters, namespace policy, hit normalization       |
-| AWS Secrets Manager                                  | `@aws-sdk/client-secrets-manager`  | Adopted | secret-ref validation, redaction, stable failure codes    |
-| Azure Key Vault                                      | `@azure/keyvault-secrets`          | Adopted | secret-ref validation, redaction, stable failure codes    |
-| Google Cloud Secret Manager                          | `@google-cloud/secret-manager`     | Adopted | secret-ref validation, redaction, stable failure codes    |
-| HashiCorp Vault KV-v2                                | `@litehex/node-vault`              | Adopted | path policy, redaction, stable failure codes              |
-| Notion connectors                                    | `@notionhq/client`                 | Adopted | page scope, block normalization, content limits           |
-| Linear connectors                                    | `@linear/sdk`                      | Adopted | team/query scope, issue normalization, content limits     |
-| OpenID Connect and OAuth 2.0 grants                  | `openid-client` and `oauth4webapi` | Adopted | tenant/provider policy, tool-worker auth, sessions        |
-| SAML                                                 | `@node-saml/node-saml`             | Adopted | tenant policy, identity linking, sessions                 |
-| LDAP                                                 | `ldapts`                           | Adopted | directory mapping, sync policy, audit                     |
-| Password hashing                                     | `@node-rs/argon2`                  | Adopted | credential lifecycle and breach controls                  |
-| TOTP and recovery controls                           | `otplib`                           | Adopted | enrollment policy, encrypted secrets, recovery lifecycle  |
-| JWT/JWK verification                                 | `jose`                             | Adopted | allowed algorithms, issuer/audience policy, stable errors |
-| SMTP email delivery                                  | `nodemailer`                       | Adopted | templates, delivery policy, audit                         |
-| Valkey quota and rate-limit coordination             | `@valkey/valkey-glide`             | Adopted | key policy, Lua quota semantics, fail-closed errors       |
-| Route-scoped localization resources                  | `i18next-resources-to-backend`     | Adopted | namespace grouping, locale policy, translation parity     |
+| Integration                              | Qualified package                  | Status  | Romeo-owned boundary                                      |
+| ---------------------------------------- | ---------------------------------- | ------- | --------------------------------------------------------- |
+| Stripe webhooks and billing API          | `stripe`                           | Adopted | entitlement mapping, tenant policy, audit                 |
+| Amazon S3 object storage                 | `@aws-sdk/client-s3`               | Adopted | object limits, tenant prefix policy, redaction            |
+| GitHub identity and diagnostics          | `octokit`                          | Adopted | scope policy, membership mapping, audit                   |
+| Slack incoming-webhook notifications     | `@slack/webhook`                   | Adopted | destination policy, delivery ledger, content redaction    |
+| Resend email notifications               | `resend`                           | Adopted | recipient policy, templates, delivery ledger, redaction   |
+| Firebase Cloud Messaging                 | `firebase-admin`                   | Adopted | token refs, message policy, delivery ledger, redaction    |
+| Qdrant vector storage                    | `@qdrant/js-client-rest`           | Adopted | tenant filters, namespace policy, hit normalization       |
+| AWS Secrets Manager                      | `@aws-sdk/client-secrets-manager`  | Adopted | secret-ref validation, redaction, stable failure codes    |
+| Azure Key Vault                          | `@azure/keyvault-secrets`          | Adopted | secret-ref validation, redaction, stable failure codes    |
+| Google Cloud Secret Manager              | `@google-cloud/secret-manager`     | Adopted | secret-ref validation, redaction, stable failure codes    |
+| HashiCorp Vault KV-v2                    | `@litehex/node-vault`              | Adopted | path policy, redaction, stable failure codes              |
+| OpenID Connect and OAuth 2.0 grants      | `openid-client` and `oauth4webapi` | Adopted | tenant/provider policy, tool-worker auth, sessions        |
+| SAML                                     | `@node-saml/node-saml`             | Adopted | tenant policy, identity linking, sessions                 |
+| LDAP                                     | `ldapts`                           | Adopted | directory mapping, sync policy, audit                     |
+| Password hashing                         | `@node-rs/argon2`                  | Adopted | credential lifecycle and breach controls                  |
+| TOTP and recovery controls               | `otplib`                           | Adopted | enrollment policy, encrypted secrets, recovery lifecycle  |
+| JWT/JWK verification                     | `jose`                             | Adopted | allowed algorithms, issuer/audience policy, stable errors |
+| SMTP email delivery                      | `nodemailer`                       | Adopted | templates, delivery policy, audit                         |
+| Valkey quota and rate-limit coordination | `@valkey/valkey-glide`             | Adopted | key policy, Lua quota semantics, fail-closed errors       |
+| Route-scoped localization resources      | `i18next-resources-to-backend`     | Adopted | namespace grouping, locale policy, translation parity     |
 
 HashiCorp does not maintain an official Node client. `@litehex/node-vault` is a
 typed, actively maintained community client listed by HashiCorp; Romeo keeps it
 behind the same injectable SDK boundary as official cloud clients.
 
-Atlassian Cloud currently has no qualified official general-purpose Node SDK
-for Jira and Confluence REST reads. Its adapter remains centralized HTTP behind
-the connector egress boundary until a package passes this policy. Arbitrary URL
-ingestion and generic outgoing webhooks intentionally stay on the web platform
-because the target protocol is deployment-defined rather than vendor-defined.
+Arbitrary URL ingestion and generic outgoing webhooks intentionally stay on the
+web platform because the target protocol is deployment-defined rather than
+vendor-defined.
 
 Raw network code remains appropriate for generic webhooks, pre-signed object
 store transfers, SSRF-hardened arbitrary URL ingestion, and protocols without a
@@ -121,7 +116,6 @@ qualified SDK. Those implementations must remain centralized and tested.
 | Arbitrary URL ingestion                         | The destination is user/admin supplied and must be DNS-pinned and SSRF governed | Central URL-ingestion executor only |
 | Generic outgoing webhooks                       | The destination and payload contract are deployment defined                     | Central signed-webhook sender only  |
 | Microsoft Teams and generic enterprise webhooks | No qualified SDK improves the one-operation webhook protocol                    | Central notification sender only    |
-| Atlassian Jira/Confluence reads                 | No qualified official general-purpose Node SDK currently meets this policy      | Central Atlassian connector only    |
 | Brave, Tavily, and SearXNG web search           | A common qualified SDK does not cover the governed multi-provider contract      | Central web-search adapter only     |
 | GitHub OAuth PKCE token exchange                | Octokit does not serialize the required `code_verifier` for this flow           | One token-exchange method only      |
 

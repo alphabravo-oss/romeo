@@ -12,10 +12,8 @@ import {
   enforceWebUrlLimit,
 } from "./capability-consumer-enforcement";
 import { consumeQuota } from "./consume-quota";
-import {
-  WebsiteDataConnectorExecutor,
-  assertConnectorHostAllowed,
-} from "./data-connector-executors";
+import { GovernedWebFetcher } from "./governed-web-fetch";
+import { assertConnectorHostAllowed } from "./outbound-network-policy";
 import { assertManagedSecretRef } from "./secret-refs";
 import { recordSubjectUsage } from "./record-usage";
 import { recordRetrievalUnits } from "./web-search-usage";
@@ -336,7 +334,7 @@ export class WebSearchService extends WebSearchProviderClient {
     );
     const sourceId = createId("web_ingest");
     const startedAt = Date.now();
-    const executor = new WebsiteDataConnectorExecutor({
+    const executor = new GovernedWebFetcher({
       fetchImpl: this.fetchImpl,
       ...(this.pinnedFetchImpl === undefined
         ? {}

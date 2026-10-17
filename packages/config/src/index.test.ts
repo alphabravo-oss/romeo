@@ -246,10 +246,6 @@ describe("Romeo config", () => {
         BILLING_ENABLED: "true",
         BILLING_STRIPE_WEBHOOK_SECRET: "whsec_prod_4hQ8wZ2mN7cR5tY9p",
         BILLING_GENERIC_WEBHOOK_SECRET: "generic_prod_9pT3dF6kL2sV8xC4m",
-        DELEGATED_OAUTH_GITHUB_CLIENT_ID: "github-prod-app",
-        DELEGATED_OAUTH_GITHUB_CLIENT_SECRET: "gh-client-4hQ8wZ2mN7cR5tY9p",
-        DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY:
-          "Deleg4ted!3cN6bL1dF7mQ2vK9xR5tY8pW",
         EXTERNAL_VECTOR_STORE_DRIVER: "qdrant",
         QDRANT_URL: "https://vectors.prod.invalid",
         QDRANT_API_KEY_REF: "romeo-secret://qdrant/api-key",
@@ -447,10 +443,6 @@ describe("Romeo config", () => {
   it("requires provider-specific credentials for enabled production capabilities", () => {
     for (const [override, message] of [
       [{ VOICE_PROVIDER_DRIVER: "openai-compatible" }, /VOICE_OPENAI_API_KEY/],
-      [
-        { DELEGATED_OAUTH_GITHUB_CLIENT_ID: "github-app" },
-        /DELEGATED_OAUTH_GITHUB_CLIENT_SECRET/,
-      ],
       [{ SECRET_RESOLVER_DRIVER: "vault" }, /VAULT_ADDR/],
       [{ SECRET_RESOLVER_DRIVER: "aws-sm" }, /AWS_REGION/],
       [{ SECRET_RESOLVER_DRIVER: "gcp-sm" }, /GCP_SECRET_MANAGER_PROJECT/],
@@ -511,16 +503,7 @@ describe("Romeo config", () => {
       OIDC_GROUP_MAP: "/romeo/users=group_users",
       OIDC_WORKSPACE_GROUP_MAP: "/romeo/finance=workspace_finance",
       OIDC_WORKSPACE_GROUP_PREFIX: "workspace:",
-      DATA_CONNECTOR_EXECUTION_DRIVER: "s3-fetch",
       OPENWEBUI_COMPATIBILITY_ENABLED: "true",
-      DATA_CONNECTOR_EGRESS_POLICY: "require_allowlist",
-      DATA_CONNECTOR_FETCH_ALLOWED_HOSTS: "docs.example.com,*.trusted.example",
-      DATA_CONNECTOR_FETCH_RETRY_ATTEMPTS: "3",
-      DATA_CONNECTOR_FETCH_RETRY_BACKOFF_MS: "750",
-      DELEGATED_OAUTH_GITHUB_CLIENT_ID: "github-client-id",
-      DELEGATED_OAUTH_GITHUB_CLIENT_SECRET: "github-client-secret",
-      DELEGATED_OAUTH_GITHUB_SCOPES: "repo,read:user",
-      DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY: "delegated-token-key-32-bytes-long",
       SECRET_RESOLVER_DRIVER: "cloud",
       VAULT_ADDR: "https://vault.example.com",
       VAULT_TOKEN: "vault-token",
@@ -613,10 +596,6 @@ describe("Romeo config", () => {
         "/etc/romeo/log-retention-evidence.json",
       DATA_RIGHTS_BACKUP_RETENTION_EVIDENCE_PATH:
         "/etc/romeo/backup-retention-evidence.json",
-      DATA_CONNECTOR_LIVE_EVIDENCE_PATH:
-        "/etc/romeo/data-connector-live-evidence.json",
-      DATA_CONNECTOR_WORKER_ENABLED: "true",
-      DATA_CONNECTOR_NETWORK_POLICY_ENABLED: "true",
       WEB_SEARCH_TIMEOUT_MS: "45000",
       TOOL_DISPATCH_WORKER_ENABLED: "true",
       TOOL_DISPATCH_NETWORK_POLICY_ENABLED: "true",
@@ -682,23 +661,8 @@ describe("Romeo config", () => {
     expect(env.OIDC_ADMIN_GROUPS).toContain("/romeo/admins");
     expect(env.OIDC_GROUP_MAP).toBe("/romeo/users=group_users");
     expect(env.OIDC_WORKSPACE_GROUP_PREFIX).toBe("workspace:");
-    expect(env.DATA_CONNECTOR_EXECUTION_DRIVER).toBe("s3-fetch");
     expect(env.WEB_SEARCH_TIMEOUT_MS).toBe(45_000);
     expect(env.OPENWEBUI_COMPATIBILITY_ENABLED).toBe(true);
-    expect(env.DATA_CONNECTOR_EGRESS_POLICY).toBe("require_allowlist");
-    expect(env.DATA_CONNECTOR_FETCH_ALLOWED_HOSTS).toBe(
-      "docs.example.com,*.trusted.example",
-    );
-    expect(env.DATA_CONNECTOR_FETCH_RETRY_ATTEMPTS).toBe(3);
-    expect(env.DATA_CONNECTOR_FETCH_RETRY_BACKOFF_MS).toBe(750);
-    expect(env.DELEGATED_OAUTH_GITHUB_CLIENT_ID).toBe("github-client-id");
-    expect(env.DELEGATED_OAUTH_GITHUB_CLIENT_SECRET).toBe(
-      "github-client-secret",
-    );
-    expect(env.DELEGATED_OAUTH_GITHUB_SCOPES).toBe("repo,read:user");
-    expect(env.DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY).toBe(
-      "delegated-token-key-32-bytes-long",
-    );
     expect(env.SECRET_RESOLVER_DRIVER).toBe("cloud");
     expect(env.VAULT_ADDR).toBe("https://vault.example.com");
     expect(env.VAULT_NAMESPACE).toBe("admin");
@@ -819,11 +783,6 @@ describe("Romeo config", () => {
     expect(env.DATA_RIGHTS_BACKUP_RETENTION_EVIDENCE_PATH).toBe(
       "/etc/romeo/backup-retention-evidence.json",
     );
-    expect(env.DATA_CONNECTOR_LIVE_EVIDENCE_PATH).toBe(
-      "/etc/romeo/data-connector-live-evidence.json",
-    );
-    expect(env.DATA_CONNECTOR_WORKER_ENABLED).toBe(true);
-    expect(env.DATA_CONNECTOR_NETWORK_POLICY_ENABLED).toBe(true);
     expect(env.TOOL_DISPATCH_WORKER_ENABLED).toBe(true);
     expect(env.TOOL_DISPATCH_NETWORK_POLICY_ENABLED).toBe(true);
     expect(env.POSTGRES_POOL_MAX).toBe(7);

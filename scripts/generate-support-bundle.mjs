@@ -78,14 +78,6 @@ function packageSummary() {
 
 function configurationPosture(env) {
   const safeEnums = {
-    DATA_CONNECTOR_EXECUTION_DRIVER: [
-      "disabled",
-      "website-fetch",
-      "github-fetch",
-      "s3-fetch",
-      "managed-fetch",
-    ],
-    DATA_CONNECTOR_EGRESS_POLICY: ["allow_public", "require_allowlist"],
     DEV_SEEDED_LOGIN: ["true", "false"],
     KNOWLEDGE_EXTRACTION_DRIVER: [
       "disabled",
@@ -122,8 +114,6 @@ function configurationPosture(env) {
     "BROWSER_AUTOMATION_MAX_BYTES",
     "BROWSER_AUTOMATION_MAX_JOBS",
     "BROWSER_AUTOMATION_TIMEOUT_MS",
-    "DATA_CONNECTOR_FETCH_MAX_BYTES",
-    "DATA_CONNECTOR_FETCH_TIMEOUT_MS",
     "KNOWLEDGE_EXTRACTION_MAX_BYTES",
     "KNOWLEDGE_EXTRACTION_TIMEOUT_MS",
     "MODEL_PROVIDER_CIRCUIT_COOLDOWN_MS",
@@ -159,10 +149,6 @@ function configurationPosture(env) {
     "BILLING_GENERIC_WEBHOOK_SECRET",
     "BILLING_STRIPE_WEBHOOK_SECRET",
     "BROWSER_AUTOMATION_LIVE_EVIDENCE_PATH",
-    "DATA_CONNECTOR_GITHUB_TOKEN",
-    "DELEGATED_OAUTH_GITHUB_CLIENT_SECRET",
-    "DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY",
-    "DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY_PREVIOUS",
     "DATABASE_URL",
     "GCP_ACCESS_TOKEN",
     "LOCAL_AUTH_SECRET_ENCRYPTION_KEY",

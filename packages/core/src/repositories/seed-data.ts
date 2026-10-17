@@ -244,9 +244,6 @@ export function createSeedData(now = new Date().toISOString()): SeedData {
     knowledgeSources: [],
     knowledgeChunks: [],
     knowledgeChunkEmbeddings: [],
-    dataConnectors: [],
-    dataConnectorSyncs: [],
-    delegatedOAuthConnections: [],
     voiceProfiles: [
       {
         id: "voice_default",

@@ -15,8 +15,6 @@ import { capabilityFlagRoutes } from "./capability-flags";
 import { collaborationRoutes } from "./collaboration-routes";
 import { contentPolicyRoutes } from "./content-policy";
 import { contentPolicyLifecycleRoutes } from "./content-policy-lifecycle";
-import { dataConnectorRoutes } from "./data-connectors";
-import { delegatedOAuthRoutes } from "./delegated-oauth";
 import { deviceAuthorizationRoutes } from "./device-authorizations";
 import { edgeSecurityRoutes } from "./edge-security";
 import { enterpriseSurfaceRoutes } from "./enterprise-surfaces";
@@ -146,8 +144,6 @@ export const contractRoutes = [
   ...collaborationRoutes,
   ...contentPolicyRoutes,
   ...contentPolicyLifecycleRoutes,
-  ...dataConnectorRoutes,
-  ...delegatedOAuthRoutes,
   ...deviceAuthorizationRoutes,
   ...edgeSecurityRoutes,
   ...enterpriseSurfaceRoutes,

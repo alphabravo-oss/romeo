@@ -30,9 +30,6 @@ import { PolicyApprovalService } from "./policy-approval-service";
 import type { CapabilityService } from "./capability-resolver";
 import type { CapabilityPlatformPolicy } from "./capability-platform-policy";
 import type { OrganizationCapabilityFlagService } from "./organization-capability-flag-service";
-import type { DataConnectorExecutor } from "./data-connector-executors";
-import { DataConnectorService } from "./data-connector-service";
-import type { DelegatedOAuthService } from "./delegated-oauth-service";
 import type { DirectorySyncService } from "./directory-sync-service";
 import { DeviceAuthorizationService } from "./device-authorization-service";
 import { EdgeSecurityService } from "./edge-security-service";
@@ -103,7 +100,6 @@ import type { WebSearchService } from "./web-search-service";
 import { WorkspaceContentService } from "./workspace-content-service";
 import { WorkspaceService } from "./workspace-service";
 import type { CreateServicesOptions, RomeoServices } from "./index";
-import { dataConnectorRuntimePosture } from "./service-registry-data-connector-posture";
 
 interface ServiceRegistryInput {
   abuseControls: AbuseControlService;
@@ -115,8 +111,6 @@ interface ServiceRegistryInput {
   capabilityPlatformPolicy: CapabilityPlatformPolicy;
   chatEvents: ChatEventService;
   chats: ChatService;
-  dataConnectorExecutor: DataConnectorExecutor;
-  delegatedOAuth: DelegatedOAuthService;
   directorySync: DirectorySyncService;
   env: RomeoEnv;
   files: FileService;
@@ -158,8 +152,6 @@ export function buildServiceRegistry(
     capabilityPlatformPolicy,
     chatEvents,
     chats,
-    dataConnectorExecutor,
-    delegatedOAuth,
     directorySync,
     env,
     files,
@@ -261,13 +253,6 @@ export function buildServiceRegistry(
       resolve: (resolution) => runs.resolveContentPolicyApproval(resolution),
       expireDue: (subject) => runs.expireContentPolicyApprovals(subject),
     }),
-    dataConnectors: new DataConnectorService(
-      repository,
-      knowledge,
-      dataConnectorExecutor,
-      dataConnectorRuntimePosture(env),
-    ),
-    delegatedOAuth,
     deployment: {
       tenancyMode: env.TENANCY_MODE,
       billingEnabled: env.BILLING_ENABLED,
@@ -360,9 +345,9 @@ export function buildServiceRegistry(
       env,
       authProviderSettings,
       secretResolver,
-      options.delegatedOAuthFetch === undefined
+      options.oauth2ProviderFetch === undefined
         ? {}
-        : { fetchImpl: options.delegatedOAuthFetch },
+        : { fetchImpl: options.oauth2ProviderFetch },
     ),
     samlAuth: new SamlAuthService(
       repository,

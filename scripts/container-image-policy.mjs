@@ -281,7 +281,6 @@ try {
     "--dry-run",
   ]);
   for (const worker of [
-    "data-connector-sync",
     "webhook-retry",
     "notification-retry",
     "retention-enforce",

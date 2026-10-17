@@ -5,7 +5,6 @@ import {
   agentModels,
   baseModels,
   chats,
-  dataConnectors,
   knowledgeBases,
   objectRecords,
   promptTemplates,
@@ -22,7 +21,6 @@ import {
 export type ResourceTypeRecord =
   | "agent"
   | "chat"
-  | "data_connector"
   | "file"
   | "folder"
   | "knowledge_base"
@@ -150,11 +148,6 @@ export class PgAccessRepository {
       return this.requiredOrgId(this.chatOrgId(grant.resourceId), grant);
     if (grant.resourceType === "run")
       return this.requiredOrgId(this.runOrgId(grant.resourceId), grant);
-    if (grant.resourceType === "data_connector")
-      return this.requiredOrgId(
-        this.dataConnectorOrgId(grant.resourceId),
-        grant,
-      );
     if (grant.resourceType === "file")
       return this.requiredOrgId(this.fileObjectOrgId(grant.resourceId), grant);
     if (grant.resourceType === "knowledge_base")
@@ -268,17 +261,6 @@ export class PgAccessRepository {
     return row?.orgId;
   }
 
-  private async dataConnectorOrgId(
-    resourceId: string,
-  ): Promise<string | undefined> {
-    const [row] = await this.db
-      .select({ orgId: dataConnectors.orgId })
-      .from(dataConnectors)
-      .where(eq(dataConnectors.id, resourceId))
-      .limit(1);
-    return row?.orgId;
-  }
-
   private async knowledgeBaseOrgId(
     resourceId: string,
   ): Promise<string | undefined> {
@@ -379,7 +361,6 @@ function asResourceType(value: string): ResourceTypeRecord {
   if (
     value === "agent" ||
     value === "chat" ||
-    value === "data_connector" ||
     value === "file" ||
     value === "folder" ||
     value === "knowledge_base" ||

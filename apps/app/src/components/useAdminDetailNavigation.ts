@@ -55,7 +55,6 @@ export function useAdminDetailNavigation() {
           return {
             ...rest,
             section: "connections",
-            view: "tools",
             ...(toolConnector ? { toolConnector } : {}),
           };
         },

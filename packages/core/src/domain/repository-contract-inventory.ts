@@ -12,7 +12,6 @@ export type RepositoryMethodDomain =
   | "capability"
   | "chat"
   | "collaboration"
-  | "connector"
   | "eval"
   | "file"
   | "governance"
@@ -138,8 +137,6 @@ function domainForMethod(
     return "chat";
   if (includesAny(method, ["Notification"])) return "notification";
   if (includesAny(method, ["Knowledge"])) return "knowledge";
-  if (includesAny(method, ["DataConnector", "DelegatedOAuth"]))
-    return "connector";
   if (includesAny(method, ["Voice"])) return "voice";
   if (includesAny(method, ["Tool"])) return "tool";
   if (
@@ -266,7 +263,6 @@ function auditImpactForDomain(
   if (domain === "billing" || domain === "quota" || domain === "usage")
     return "usage";
   if (
-    domain === "connector" ||
     domain === "job" ||
     domain === "notification" ||
     domain === "provider" ||

@@ -54,11 +54,6 @@ export const platformEnvShape = {
   QDRANT_LIVE_EVIDENCE_PATH: z.string().default(""),
   DATA_RIGHTS_OPERATIONAL_LOG_RETENTION_EVIDENCE_PATH: z.string().default(""),
   DATA_RIGHTS_BACKUP_RETENTION_EVIDENCE_PATH: z.string().default(""),
-  DATA_CONNECTOR_LIVE_EVIDENCE_PATH: z.string().default(""),
-  DATA_CONNECTOR_WORKER_ENABLED: z
-    .enum(["true", "false"])
-    .default("false")
-    .transform((value) => value === "true"),
   SCHEDULED_TENANT_WORK_OWNER: z
     .enum(["internal", "external"])
     .default("internal"),
@@ -69,10 +64,6 @@ export const platformEnvShape = {
     .min(60)
     .max(86_400)
     .default(900),
-  DATA_CONNECTOR_NETWORK_POLICY_ENABLED: z
-    .enum(["true", "false"])
-    .default("false")
-    .transform((value) => value === "true"),
   TOOL_DISPATCH_WORKER_ENABLED: z
     .enum(["true", "false"])
     .default("false")

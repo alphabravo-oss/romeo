@@ -3,7 +3,7 @@ import { request as httpsRequest } from "node:https";
 import type { LookupFunction } from "node:net";
 import { Readable } from "node:stream";
 
-import type { WebsiteConnectorHostAddress } from "./data-connector-executors";
+import type { WebsiteConnectorHostAddress } from "./outbound-network-policy";
 
 export type DnsPinnedFetch = (
   url: URL,

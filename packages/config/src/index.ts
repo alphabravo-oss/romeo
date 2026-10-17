@@ -190,15 +190,6 @@ export const envSchema = z
       .default("false")
       .transform((value) => value === "true"),
     OBJECT_STORE_DRIVER: z.enum(["memory", "s3"]).default("memory"),
-    DATA_CONNECTOR_EXECUTION_DRIVER: z
-      .enum([
-        "disabled",
-        "website-fetch",
-        "github-fetch",
-        "s3-fetch",
-        "managed-fetch",
-      ])
-      .default("disabled"),
     TOOL_OPERATION_EXECUTION_DRIVER: z
       .enum(["disabled", "http-fetch"])
       .default("disabled"),
@@ -220,46 +211,12 @@ export const envSchema = z
       .int()
       .positive()
       .default(1_000_000),
-    DATA_CONNECTOR_EGRESS_POLICY: z
-      .enum(["allow_public", "require_allowlist"])
-      .default("allow_public"),
-    DATA_CONNECTOR_FETCH_ALLOWED_HOSTS: z.string().default(""),
-    DATA_CONNECTOR_FETCH_MAX_BYTES: z.coerce
-      .number()
-      .int()
-      .positive()
-      .default(2_000_000),
-    DATA_CONNECTOR_FETCH_TIMEOUT_MS: z.coerce
-      .number()
-      .int()
-      .positive()
-      .default(10_000),
     WEB_SEARCH_TIMEOUT_MS: z.coerce
       .number()
       .int()
       .positive()
       .max(300_000)
       .default(12_000),
-    DATA_CONNECTOR_FETCH_RETRY_ATTEMPTS: z.coerce
-      .number()
-      .int()
-      .min(0)
-      .max(5)
-      .default(1),
-    DATA_CONNECTOR_FETCH_RETRY_BACKOFF_MS: z.coerce
-      .number()
-      .int()
-      .min(0)
-      .max(60_000)
-      .default(250),
-    DATA_CONNECTOR_GITHUB_TOKEN: z.string().default(""),
-    DELEGATED_OAUTH_GITHUB_CLIENT_ID: z.string().default(""),
-    DELEGATED_OAUTH_GITHUB_CLIENT_SECRET: z.string().default(""),
-    DELEGATED_OAUTH_GITHUB_SCOPES: z
-      .string()
-      .default("repo,read:user,user:email"),
-    DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY: z.string().default(""),
-    DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY_PREVIOUS: z.string().default(""),
     KNOWLEDGE_EXTRACTION_DRIVER: z
       .enum(["disabled", "local-pdftotext", "local-documents"])
       .default("local-documents"),

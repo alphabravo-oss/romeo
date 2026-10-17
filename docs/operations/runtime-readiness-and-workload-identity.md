@@ -25,7 +25,7 @@ Exactly one owner is permitted:
 | `internal` | Fenced all-tenant coordinator in each elected runtime | Fresh worker-health snapshots for every enabled operation; failures/backoff are unready                                            |
 | `external` | Named external platform owner                         | Mounted v1 evidence with exact operation coverage, healthy status, observation within max age, live status reference, and alerting |
 
-Legacy tenant-token CronJobs for connector sync, webhook/notification retry,
+Legacy tenant-token CronJobs for webhook/notification retry,
 retention, billing reconciliation/lifecycle, and voice/provider sync are
 production-invalid. The rendered `romeo-operational-ownership` ConfigMap is a
 non-secret deployment inventory; live proof still comes from runtime health or

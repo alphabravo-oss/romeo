@@ -23,10 +23,9 @@ restore drill must prove the isolated database and object targets plus
 application-level readback. Offline smokes prove the fail-closed policy and
 tamper matrix, not cloud durability.
 
-Webhook and delegated OAuth rotations are read-old/write-new. Add the previous
-key, deploy the new active key, allow OAuth use to rewrap legacy/previous
-envelopes, and allow webhook consumers to adopt the active versioned signature
-while the previous signature header is present. A global administrator with the
+Webhook signing key rotations are read-old/write-new. Add the previous key,
+deploy the new active key, and allow webhook consumers to adopt the active
+versioned signature while the previous signature header is present. A global administrator with the
 explicit `admin:read` scope must read
 `GET /api/v1/admin/runtime-key-rotation/posture` through the system-coordinator
 database boundary before removing a deployment-global previous key. The

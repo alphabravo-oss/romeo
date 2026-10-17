@@ -103,7 +103,6 @@ export const AuthProviderConnectionTestReportSchema = z
 
 const ManagedSecretPurposeSchema = z.enum([
   "auth_provider_client_secret",
-  "data_connector_credential",
   "model_provider_credential",
   "tool_connector_credential",
 ]);

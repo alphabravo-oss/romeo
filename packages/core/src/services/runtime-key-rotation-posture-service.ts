@@ -4,7 +4,6 @@ import type { RomeoEnv } from "@romeo/config";
 import type { RomeoRepository } from "../domain/repository";
 import type { RuntimeKeyUsageCounts } from "../domain/runtime-key-usage";
 import { writeAuditLog } from "./audit-log";
-import { DelegatedOAuthTokenVault } from "./delegated-oauth-token-vault";
 import { WebhookSigningKeyring } from "./webhook-signing-keyring";
 
 export type RuntimeKeyRotationBlockerCode =
@@ -39,11 +38,9 @@ export interface RuntimeKeyRotationPostureReport {
   generatedAt: string;
   aggregationScope: "all_organizations";
   status: "attention_required" | "ready";
-  delegatedOAuth: RuntimeKeyRotationSurfacePosture;
   webhookSigning: RuntimeKeyRotationSurfacePosture;
   redaction: {
     ciphertextReturned: false;
-    connectionIdsReturned: false;
     deliveryIdsReturned: false;
     keyMaterialReturned: false;
     payloadsReturned: false;
@@ -69,42 +66,16 @@ export class RuntimeKeyRotationPostureService {
     }
 
     return this.repository.transaction(async (repository) => {
-      const oauth = oauthKeyringConfiguration(this.env);
       const webhook = webhookKeyringConfiguration(this.env);
-      const [oauthUsage, webhookUsage] = await Promise.all([
-        repository.countDelegatedOAuthTokenKeyUsage({
-          ...(oauth.keyring === undefined
-            ? {}
-            : { activeVersion: oauth.keyring.activeKeyVersion }),
-          ...(oauth.keyring?.previousKeyVersion === undefined
-            ? {}
-            : { previousVersion: oauth.keyring.previousKeyVersion }),
-        }),
-        repository.countWebhookSigningKeyUsage({
-          ...(webhook.keyring === undefined
-            ? {}
-            : { activeVersion: webhook.keyring.activeVersion }),
-          ...(webhook.keyring?.previousVersion === undefined
-            ? {}
-            : { previousVersion: webhook.keyring.previousVersion }),
-        }),
-      ]);
-
-      const delegatedOAuth = surfacePosture({
-        activeKeyConfigured: oauth.activeKeyConfigured,
-        counts: oauthUsage,
-        ...(oauth.keyring === undefined
+      const webhookUsage = await repository.countWebhookSigningKeyUsage({
+        ...(webhook.keyring === undefined
           ? {}
-          : {
-              keyringPosture:
-                oauth.keyring.rotationPostureFromUsage(oauthUsage),
-            }),
-        ...(oauth.previousFailure === undefined
+          : { activeVersion: webhook.keyring.activeVersion }),
+        ...(webhook.keyring?.previousVersion === undefined
           ? {}
-          : { previousFailure: oauth.previousFailure }),
-        previousKeyAccepted: oauth.keyring?.previousKeyVersion !== undefined,
-        previousKeyConfigured: oauth.previousKeyConfigured,
+          : { previousVersion: webhook.keyring.previousVersion }),
       });
+
       const webhookSigning = surfacePosture({
         activeKeyConfigured: webhook.activeKeyConfigured,
         counts: webhookUsage,
@@ -125,15 +96,10 @@ export class RuntimeKeyRotationPostureService {
         generatedAt: new Date().toISOString(),
         aggregationScope: "all_organizations",
         status:
-          delegatedOAuth.blockers.length === 0 &&
-          webhookSigning.blockers.length === 0
-            ? "ready"
-            : "attention_required",
-        delegatedOAuth,
+          webhookSigning.blockers.length === 0 ? "ready" : "attention_required",
         webhookSigning,
         redaction: {
           ciphertextReturned: false,
-          connectionIdsReturned: false,
           deliveryIdsReturned: false,
           keyMaterialReturned: false,
           payloadsReturned: false,
@@ -151,7 +117,6 @@ export class RuntimeKeyRotationPostureService {
           aggregationScope: report.aggregationScope,
           schema: report.schema,
           status: report.status,
-          delegatedOAuth: auditSurface(delegatedOAuth),
           webhookSigning: auditSurface(webhookSigning),
           keyMaterialReturned: false,
           secretValuesReturned: false,
@@ -167,46 +132,6 @@ interface KeyringConfiguration<T> {
   keyring?: T;
   previousFailure?: "invalid" | "matches_active";
   previousKeyConfigured: boolean;
-}
-
-function oauthKeyringConfiguration(
-  env: RomeoEnv,
-): KeyringConfiguration<DelegatedOAuthTokenVault> {
-  const active = env.DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY.trim();
-  const previous = env.DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY_PREVIOUS.trim();
-  const activeKeyConfigured = active.length >= 32;
-  const previousKeyConfigured = previous.length > 0;
-  if (!activeKeyConfigured)
-    return { activeKeyConfigured, previousKeyConfigured };
-  if (!previousKeyConfigured) {
-    return {
-      activeKeyConfigured,
-      keyring: new DelegatedOAuthTokenVault(active),
-      previousKeyConfigured,
-    };
-  }
-  if (previous.length < 32) {
-    return {
-      activeKeyConfigured,
-      keyring: new DelegatedOAuthTokenVault(active),
-      previousFailure: "invalid",
-      previousKeyConfigured,
-    };
-  }
-  try {
-    return {
-      activeKeyConfigured,
-      keyring: new DelegatedOAuthTokenVault({ active, previous }),
-      previousKeyConfigured,
-    };
-  } catch {
-    return {
-      activeKeyConfigured,
-      keyring: new DelegatedOAuthTokenVault(active),
-      previousFailure: "matches_active",
-      previousKeyConfigured,
-    };
-  }
 }
 
 function webhookKeyringConfiguration(

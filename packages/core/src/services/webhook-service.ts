@@ -9,7 +9,7 @@ import type { RomeoRepository } from "../domain/repository";
 import { notFound } from "../errors";
 import { createId } from "../ids";
 import { assertAbuseControlsAllow } from "./abuse-control-service";
-import type { WebsiteConnectorHostLookup } from "./data-connector-network-policy";
+import type { WebsiteConnectorHostLookup } from "./outbound-network-policy";
 import type { DnsPinnedFetch } from "./dns-pinned-fetch";
 import {
   completeBackgroundJob,

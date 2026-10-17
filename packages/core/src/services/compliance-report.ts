@@ -21,8 +21,6 @@ export async function buildComplianceReport(
     apiKeys,
     serviceAccounts,
     usageEvents,
-    dataConnectors,
-    dataConnectorSyncs,
     toolCalls,
     webhookSubscriptions,
     webhookDeliveries,
@@ -35,8 +33,6 @@ export async function buildComplianceReport(
     repository.listApiKeys(subject.orgId),
     repository.listServiceAccounts(subject.orgId),
     repository.listUsageEvents(subject.orgId),
-    repository.listDataConnectors(subject.orgId),
-    repository.listDataConnectorSyncs(subject.orgId),
     repository.listToolCalls(subject.orgId),
     repository.listWebhookSubscriptions(subject.orgId),
     repository.listWebhookDeliveries(subject.orgId),
@@ -119,16 +115,6 @@ export async function buildComplianceReport(
         agentCount: workspaceCounts.agentCount,
         chatCount: workspaceCounts.chatCount,
         knowledgeBaseCount: workspaceCounts.knowledgeBaseCount,
-      }),
-      control("connector_governance", "Connector governance", "informational", {
-        dataConnectorCount: dataConnectors.length,
-        scheduledConnectorCount: dataConnectors.filter(
-          (connector) => connector.syncIntervalMinutes !== undefined,
-        ).length,
-        connectorSyncCount: dataConnectorSyncs.length,
-        failedConnectorSyncCount: dataConnectorSyncs.filter(
-          (sync) => sync.status === "failed",
-        ).length,
       }),
       control(
         "automation_and_tooling",

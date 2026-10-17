@@ -23,39 +23,6 @@ describe("public API compatibility retirement", () => {
     expect(response.headers.get("link")).toContain('rel="deprecation"');
   });
 
-  it("accepts legacy connector values at the schema boundary and rejects them explicitly", async () => {
-    const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: testEnv(),
-    });
-
-    const connectorResponse = await api.request("/api/v1/data-connectors", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        workspaceId: "workspace_default",
-        knowledgeBaseId: "kb_default",
-        type: "notion",
-        name: "Retired Notion connector",
-      }),
-    });
-    const connectorBody = await connectorResponse.json();
-    expect(connectorResponse.status).toBe(400);
-    expect(connectorBody.error.code).toBe("connector_type_not_implemented");
-
-    const oauthResponse = await api.request("/api/v1/delegated-oauth/start", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        providerId: "github",
-        workspaceId: "workspace_default",
-        connectorType: "slack",
-      }),
-    });
-    const oauthBody = await oauthResponse.json();
-    expect(oauthResponse.status).toBe(400);
-    expect(oauthBody.error.code).toBe("delegated_oauth_connector_unsupported");
-  });
-
   it("derives stable legacy billing event ids independent of object key order", () => {
     const first = legacyBillingEventId({
       provider: "stripe",

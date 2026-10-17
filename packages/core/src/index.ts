@@ -5,8 +5,6 @@ export * from "./domain/audit-integrity";
 export * from "./domain/capabilities";
 export * from "./domain/capability-flags";
 export * from "./domain/idempotency";
-export * from "./domain/data-connectors";
-export * from "./domain/delegated-oauth";
 export * from "./domain/entities";
 export * from "./domain/file-tombstone";
 export * from "./domain/repository";

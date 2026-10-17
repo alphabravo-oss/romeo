@@ -13,7 +13,6 @@ describe("redaction sentinel evidence", () => {
     });
 
     const promptSentinel = "HAM_REDACTION_PROMPT_SENTINEL";
-    const connectorSentinel = "HAM_REDACTION_CONNECTOR_SENTINEL";
     const commentSentinel = "HAM_REDACTION_COMMENT_SENTINEL";
     const webhookSentinel = "HAM_REDACTION_WEBHOOK_SENTINEL";
 
@@ -62,31 +61,6 @@ describe("redaction sentinel evidence", () => {
         (await repository.getRun(run.data.id))?.status === "completed",
     );
 
-    const connectorResponse = await api.request("/api/v1/data-connectors", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        workspaceId: "workspace_default",
-        knowledgeBaseId: "kb_default",
-        type: "local_import",
-        name: "Redaction sentinel connector",
-      }),
-    });
-    const connector = await connectorResponse.json();
-    await api.request(`/api/v1/data-connectors/${connector.data.id}/sync`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        items: [
-          {
-            fileName: "redaction.md",
-            mimeType: "text/markdown",
-            content: connectorSentinel,
-          },
-        ],
-      }),
-    });
-
     await api.request("/api/v1/notification-channels", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -116,15 +90,12 @@ describe("redaction sentinel evidence", () => {
     expect(webhookResponse.status).toBe(201);
     expect(webhookSecret).toMatch(/^whsec_/);
     expect(runResponse.status).toBe(202);
-    expect(connectorResponse.status).toBe(201);
 
     expectOperationalSurfacesDoNotContain(
       {
         auditLogs: await repository.listAuditLogs("org_default"),
         usageEvents: await repository.listUsageEvents("org_default"),
         backgroundJobs: await repository.listBackgroundJobs("org_default"),
-        dataConnectorSyncs:
-          await repository.listDataConnectorSyncs("org_default"),
         userNotifications: await repository.listUserNotifications(
           "org_default",
           "user_dev_admin",
@@ -140,13 +111,7 @@ describe("redaction sentinel evidence", () => {
         complianceReport: complianceReport.data,
         complianceCsv,
       },
-      [
-        promptSentinel,
-        connectorSentinel,
-        commentSentinel,
-        webhookSentinel,
-        webhookSecret,
-      ],
+      [promptSentinel, commentSentinel, webhookSentinel, webhookSecret],
     );
   });
 });

@@ -27,7 +27,6 @@ import {
   secretCheck,
 } from "./readiness-auth-checks";
 import {
-  connectorEgressCheck,
   databaseUrlCheck,
   postgresConnectionSecurityCheck,
   repositoryPersistenceCheck,
@@ -73,7 +72,6 @@ export class ReadinessService {
       models,
       quotas,
       retentionPolicy,
-      dataConnectors,
       toolConnectors,
       authProviderSettings,
     ] = await Promise.all([
@@ -81,7 +79,6 @@ export class ReadinessService {
       this.repository.listModels(subject.orgId),
       this.repository.listQuotaBuckets(subject.orgId),
       this.repository.getRetentionPolicy(subject.orgId),
-      this.repository.listDataConnectors(subject.orgId),
       this.repository.listToolConnectors(subject.orgId),
       new AuthProviderSettingsService(this.repository, this.env).report(
         subject,
@@ -177,23 +174,6 @@ export class ReadinessService {
             count: quotas.length,
           })
         : warn("quotas", "No quota buckets are configured.", {}),
-      dataConnectors.some((connector) => connector.type !== "local_import") &&
-      this.env.DATA_CONNECTOR_EXECUTION_DRIVER === "disabled"
-        ? warn(
-            "outbound_connectors",
-            "Outbound connector metadata exists while execution is disabled.",
-            {
-              count: dataConnectors.filter(
-                (connector) => connector.type !== "local_import",
-              ).length,
-            },
-          )
-        : pass(
-            "outbound_connectors",
-            "Outbound connector execution posture is explicit.",
-            { driver: this.env.DATA_CONNECTOR_EXECUTION_DRIVER },
-          ),
-      connectorEgressCheck(this.env),
       toolOperationExecutionCheck(this.env, toolConnectors),
       gaEvidenceReadinessCheck(gaEvidencePosture),
     ];

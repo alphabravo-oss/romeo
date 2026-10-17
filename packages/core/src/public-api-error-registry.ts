@@ -144,7 +144,6 @@ const statusPolicy = {
 
 /** Existing compatibility exceptions. The policy gate rejects new ones. */
 const legacyAlternateHttpStatuses = {
-  delegated_oauth_scope_invalid: [401],
   knowledge_retrieval_plan_empty: [403],
   managed_secret_external_write_failed: [400, 403, 409],
   saml_request_state_invalid: [401],

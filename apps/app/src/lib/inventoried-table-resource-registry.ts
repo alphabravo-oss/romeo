@@ -1,8 +1,6 @@
 import type {
   ApiKeySummary,
   BackgroundJob,
-  DataConnector,
-  DataConnectorSync,
   DataExportPackageList,
   DeviceAuthorization,
   EvalSuite,
@@ -41,8 +39,6 @@ export interface InventoriedTableResourceRows {
   agent_versions: ManagedModelVersion;
   api_keys: ApiKeySummary;
   background_jobs: BackgroundJob;
-  data_connector_sync_runs: DataConnectorSync;
-  data_connectors: DataConnector;
   device_tokens: DeviceAuthorization;
   eval_suites: EvalSuite;
   governance_access_grants: ResourceGrant;
@@ -183,30 +179,6 @@ export const inventoriedTableResourceRegistry = {
     scope: "organization",
     searchFields: ["id", "type", "status"],
     sortFields: ["createdAt", "id", "status", "type"],
-  }),
-  data_connector_sync_runs: defineResource({
-    parentIdentityField: "connectorId",
-    parseRow: rowShape<DataConnectorSync>({
-      connectorId: "string",
-      itemCount: "number",
-      startedAt: "string",
-      status: "string",
-    }),
-    scope: "parent",
-    searchFields: ["id", "status"],
-    sortFields: ["startedAt", "id", "status"],
-  }),
-  data_connectors: defineResource({
-    parseRow: rowShape<DataConnector>({
-      knowledgeBaseId: "string",
-      name: "string",
-      status: "string",
-      type: "string",
-      workspaceId: "string",
-    }),
-    scope: "workspace",
-    sortFields: defaultSortFields,
-    summaryKeys: ["activeTotal", "total"],
   }),
   device_tokens: defineResource({
     parseRow: rowShape<DeviceAuthorization>({

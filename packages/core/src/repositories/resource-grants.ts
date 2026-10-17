@@ -22,9 +22,6 @@ export function listSeedResourceGrants(
       .map((item) => item.id),
     ...data.chats.filter((item) => item.orgId === orgId).map((item) => item.id),
     ...data.runs.filter((item) => item.orgId === orgId).map((item) => item.id),
-    ...data.dataConnectors
-      .filter((item) => item.orgId === orgId)
-      .map((item) => item.id),
     ...data.fileObjects
       .filter((item) => item.orgId === orgId)
       .map((item) => item.id),

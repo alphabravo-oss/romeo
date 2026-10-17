@@ -11,11 +11,9 @@ import {
   brokerBrowserWorkerClient,
   brokerToolWorkerClient,
 } from "./broker-worker-clients";
-import { runDataConnectorSyncWorker } from "./data-connector-worker";
 import {
   billingEntitlementWorkerClient,
   billingLifecycleWorkerClient,
-  dataConnectorWorkerClient,
   retentionWorkerClient,
   voiceWorkerClient,
 } from "./generated-worker-clients";
@@ -34,7 +32,6 @@ export function executeWorkerCommand(
   context: CommandContext,
 ): Promise<number> | undefined {
   if (area !== "workers") return undefined;
-  if (action === "data-connector-sync") return dataConnectorSyncWorker(context);
   if (action === "tool-dispatch") return toolDispatchWorker(context);
   if (action === "browser-automation") return browserAutomationWorker(context);
   if (action === "voice-catalog-sync") return voiceCatalogSyncWorker(context);
@@ -45,32 +42,6 @@ export function executeWorkerCommand(
   if (action === "billing-lifecycle-enforce")
     return billingLifecycleEnforcementWorker(context);
   return undefined;
-}
-
-function dataConnectorSyncWorker(context: CommandContext): Promise<number> {
-  const intervalMs = numberFlag(context.parsed, 60_000, "interval-ms");
-  const maxIterations = hasFlag(context.parsed.flags, "once")
-    ? 1
-    : optionalIntegerFlag(context.parsed, "max-iterations");
-  const maxConnectorsPerIteration = optionalIntegerFlag(
-    context.parsed,
-    "max-connectors",
-  );
-  const workspaceId = flagValue(
-    context.parsed.flags,
-    "workspace",
-    "workspace-id",
-  );
-  return runDataConnectorSyncWorker({
-    client: dataConnectorWorkerClient(context),
-    intervalMs,
-    io: context.io,
-    ...(maxIterations === undefined ? {} : { maxIterations }),
-    ...(maxConnectorsPerIteration === undefined
-      ? {}
-      : { maxConnectorsPerIteration }),
-    ...(workspaceId === undefined ? {} : { workspaceId }),
-  });
 }
 
 async function toolDispatchWorker(context: CommandContext): Promise<number> {

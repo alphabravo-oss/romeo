@@ -327,9 +327,6 @@ importers:
 
   packages/core:
     dependencies:
-      '@aws-sdk/client-s3':
-        specifier: 3.1090.0
-        version: 3.1090.0
       '@hono/zod-openapi':
         specifier: ^1.6.3
         version: 1.6.3(hono@4.13.13)(zod@4.4.3)

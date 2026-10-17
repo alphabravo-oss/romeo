@@ -39,16 +39,6 @@ const QUERY_PLAN_REVIEW_CHECKS = [
     expectedIndexCount: 1,
   },
   {
-    id: "data_connectors_due_sync",
-    category: "connector-sync",
-    expectedIndexCount: 1,
-  },
-  {
-    id: "data_connector_syncs_connector_recent",
-    category: "connector-sync",
-    expectedIndexCount: 1,
-  },
-  {
     id: "notification_delivery_retry",
     category: "notification-retry",
     expectedIndexCount: 1,

@@ -387,7 +387,6 @@ export function ToolConnectorPanel({
                   appHref("/admin", {
                     section: "connections",
                     toolConnector: connector.id,
-                    view: "tools",
                   })
                 }
                 preferenceKey="admin-tool-connectors"

@@ -8,7 +8,6 @@ export * from "./client";
 export * from "./collaboration-repository";
 export * from "./content-policy-repository";
 export * from "./content-deletion-repository";
-export * from "./data-connector-repository";
 export * from "./data-deletion-repository";
 export * from "./development-seed";
 export * from "./eval-repository";

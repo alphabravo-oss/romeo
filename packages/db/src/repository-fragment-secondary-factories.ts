@@ -7,9 +7,7 @@ import { PgIdempotencyRepository } from "./idempotency-repository";
 import { PgInventoriedTablePageRepository } from "./inventoried-table-page-repository";
 import { PgCollaborationChannelRepository } from "./collaboration-channel-repository";
 import { PgCollaborationRepository } from "./collaboration-repository";
-import { PgDataConnectorRepository } from "./data-connector-repository";
 import { PgDataDeletionRepository } from "./data-deletion-repository";
-import { PgDelegatedOAuthRepository } from "./delegated-oauth-repository";
 import { PgFileRepository } from "./file-repository";
 import { PgGovernanceBillingRepository } from "./governance-billing-repository";
 import { PgGovernanceExportRepository } from "./governance-export-repository";
@@ -28,9 +26,7 @@ import type {
   InventoriedTablePageRepositoryFragment,
   CollaborationChannelRepositoryFragment,
   CollaborationRepositoryFragment,
-  DataConnectorRepositoryFragment,
   DataDeletionRepositoryFragment,
-  DelegatedOAuthRepositoryFragment,
   FileRepositoryFragment,
   GovernanceBillingRepositoryFragment,
   GovernanceExportRepositoryFragment,
@@ -185,48 +181,6 @@ export function createToolConnectorRepositoryFragment(
       repository.listToolOperationsForConnectors.bind(repository),
     updateToolConnector: repository.updateToolConnector.bind(repository),
     updateToolOperation: repository.updateToolOperation.bind(repository),
-  };
-}
-
-export function createDataConnectorRepositoryFragment(
-  db: RomeoDatabase,
-): DataConnectorRepositoryFragment {
-  const repository = new PgDataConnectorRepository(db);
-  return {
-    claimDataConnectorSync: repository.claimDataConnectorSync.bind(repository),
-    createDataConnector: repository.createDataConnector.bind(repository),
-    createDataConnectorSync:
-      repository.createDataConnectorSync.bind(repository),
-    getDataConnector: repository.getDataConnector.bind(repository),
-    finishDataConnectorSync:
-      repository.finishDataConnectorSync.bind(repository),
-    listDataConnectors: repository.listDataConnectors.bind(repository),
-    listDataConnectorSyncs: repository.listDataConnectorSyncs.bind(repository),
-    renewDataConnectorSyncLease:
-      repository.renewDataConnectorSyncLease.bind(repository),
-    updateDataConnector: repository.updateDataConnector.bind(repository),
-    updateDataConnectorSync:
-      repository.updateDataConnectorSync.bind(repository),
-  };
-}
-
-export function createDelegatedOAuthRepositoryFragment(
-  db: RomeoDatabase,
-): DelegatedOAuthRepositoryFragment {
-  const repository = new PgDelegatedOAuthRepository(db);
-  return {
-    countDelegatedOAuthTokenKeyUsage:
-      repository.countDelegatedOAuthTokenKeyUsage.bind(repository),
-    createDelegatedOAuthConnection:
-      repository.createDelegatedOAuthConnection.bind(repository),
-    getDelegatedOAuthConnection:
-      repository.getDelegatedOAuthConnection.bind(repository),
-    getDelegatedOAuthConnectionByProviderAccount:
-      repository.getDelegatedOAuthConnectionByProviderAccount.bind(repository),
-    listDelegatedOAuthConnections:
-      repository.listDelegatedOAuthConnections.bind(repository),
-    updateDelegatedOAuthConnection:
-      repository.updateDelegatedOAuthConnection.bind(repository),
   };
 }
 

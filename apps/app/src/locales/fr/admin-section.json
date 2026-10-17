@@ -38,7 +38,6 @@
   "adminNotificationsDescription": "Canaux de livraison et historique des notifications.",
   "adminDeviceTokensDescription": "Identifiants d’appareil de longue durée et leurs portées.",
   "adminAuthenticationDescription": "Activez et configurez les fournisseurs d’authentification unique.",
-  "adminConnectedAppsDescription": "Fournisseurs OAuth délégués et connexions actives.",
   "adminCapabilitiesDescription": "Contrôles en couches par organisation et espace de travail pour les fonctionnalités gouvernées.",
   "adminComputeTrustDescription": "Prévisualisez le bac à sable, le runtime signé, la provenance des artefacts et les décisions de confiance sans lancer un travail."
 }

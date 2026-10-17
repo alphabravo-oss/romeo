@@ -73,11 +73,9 @@
   "authNoProviderSettings": "No provider settings available.",
   "authNoProvidersInCatalog": "No authentication providers in the catalog.",
   "authNotConfigured": "Not configured",
-  "authOff": "Off",
   "authOidcSubject": "OIDC subject",
   "authOidcUserAlreadyDisabled": "OIDC user was already disabled",
   "authOidcUserDeprovisioned": "OIDC user deprovisioned",
-  "authOn": "On",
   "authPasteClientSecret": "Paste the provider client secret",
   "authPresentUsersEmails": "Present users (emails)",
   "authPresentUsersPlaceholder": "One email per line — users NOT listed may be disabled",
@@ -118,7 +116,5 @@
   "authWorking": "Working",
   "authWorkspaceGroupPrefix": "Workspace group prefix",
   "authWorkspaceTeamPrefix": "Workspace team prefix",
-  "authZoneActive": "Active",
-  "authZoneAvailable": "Available to set up",
-  "authZoneUnavailable": "Not yet supported"
+  "authZoneActive": "Active"
 }

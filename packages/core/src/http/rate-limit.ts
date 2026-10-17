@@ -166,7 +166,6 @@ function preAuthRule(
   }
   if (
     path.startsWith("/api/v1/auth/") ||
-    path === "/api/v1/delegated-oauth/callback" ||
     path === "/api/v1/device-authorizations/refresh"
   ) {
     return {

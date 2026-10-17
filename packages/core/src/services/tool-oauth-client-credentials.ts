@@ -2,7 +2,7 @@ import * as oauth from "oauth4webapi";
 
 import type { ToolConnector } from "../domain/entities";
 import { ApiError } from "../errors";
-import type { WebsiteConnectorHostLookup } from "./data-connector-network-policy";
+import type { WebsiteConnectorHostLookup } from "./outbound-network-policy";
 import type { DnsPinnedFetch } from "./dns-pinned-fetch";
 import type { SecretResolver } from "./secret-resolver";
 import { SecretBearingEgressClient } from "./secret-bearing-egress";
