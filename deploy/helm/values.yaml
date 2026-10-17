@@ -237,6 +237,11 @@ env:
   # Operator-only deployment kill switches; exact comma-separated IDs, with no spaces.
   CAPABILITY_PLATFORM_DISABLED_IDS: realtime_voice,external_provider_use,secure_compute,image_editing,multi_model_compare,streamed_output_policy
   MODEL_PROVIDER_FALLBACK_MODEL_ID: ""
+  # Model providers may only reach public addresses. List private destinations
+  # (for example vllm.models.svc.cluster.local:8000 or 10.20.0.0/16) as
+  # comma-separated host, host:port, *.domain, [ipv6]:port, or CIDR entries.
+  # Cloud metadata and link-local addresses are always blocked.
+  PROVIDER_PRIVATE_NETWORK_ALLOWED_HOSTS: ""
   VALKEY_SECURITY_EXCEPTION_ENABLED: "false"
   VALKEY_SECURITY_EXCEPTION_SCOPE: ""
   VALKEY_SECURITY_EXCEPTION_OWNER: ""

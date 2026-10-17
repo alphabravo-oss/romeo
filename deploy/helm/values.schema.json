@@ -724,6 +724,10 @@
           "type": "string",
           "pattern": "^$|^[A-Za-z0-9_:-]+$"
         },
+        "PROVIDER_PRIVATE_NETWORK_ALLOWED_HOSTS": {
+          "type": "string",
+          "pattern": "^$|^[a-z0-9.:*\\[\\]/_-]+(,[a-z0-9.:*\\[\\]/_-]+)*$"
+        },
         "VALKEY_SECURITY_EXCEPTION_ENABLED": {
           "type": "string",
           "enum": ["true", "false"]

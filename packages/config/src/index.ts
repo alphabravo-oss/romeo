@@ -2,16 +2,23 @@ import { z } from "zod";
 
 import { s3EnvShape, trustedProxyCidrsSchema } from "./edge-storage-env-shape";
 import { platformEnvShape } from "./platform-env-shape";
+import { providerEgressEnvShape } from "./provider-egress-env-shape";
 import { productionSecurityEnvShape } from "./production-security-env-shape";
 import {
   validateProductionEnvironment,
   validateToolDispatchPayloadStore,
 } from "./env-validation";
 
+export {
+  parseProviderPrivateNetworkAllowedHosts,
+  type ProviderPrivateNetworkRule,
+} from "./provider-egress-env-shape";
+
 export const envSchema = z
   .object({
     ...platformEnvShape,
     ...productionSecurityEnvShape,
+    ...providerEgressEnvShape,
     ROMEO_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),

@@ -74,6 +74,16 @@ OpenAI, OpenRouter, Ollama, and vLLM-compatible deployments. The composer's
 model selection is stored with the chat and model pins are stored with the
 user, so both survive browser and device changes.
 
+Provider requests may only reach public addresses. Outside
+`ROMEO_ENV=production`, loopback (`http://localhost:11434`) is also allowed, so
+a local `pnpm dev` + Ollama works as-is. Any other private destination — Ollama
+on a LAN host, vLLM in the cluster, `host.docker.internal` from Compose (allowed
+by default in `deploy/compose/.env.example`), or loopback in production — must
+be listed in `PROVIDER_PRIVATE_NETWORK_ALLOWED_HOSTS` as comma-separated
+`host`, `host:port`, `*.domain`, `[ipv6]:port`, or CIDR entries (for example
+`ollama.lan:11434,vllm.models.svc.cluster.local:8000`). Cloud metadata and
+link-local addresses are always blocked.
+
 ### Run the full stack
 
 ```bash
