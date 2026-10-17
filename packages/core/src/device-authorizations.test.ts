@@ -170,4 +170,43 @@ describe("device authorization API", () => {
     expect(oldAccessResponse.status).toBe(401);
     expect(newAccessResponse.status).toBe(200);
   });
+
+  it("refuses to refresh device credentials for a disabled user", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const setupApi = createRomeoApi(repository);
+    const secureApi = createRomeoApi(repository, {
+      env: testEnv({ DEV_SEEDED_LOGIN: "false" }),
+    });
+    const created = await (
+      await setupApi.request("/api/v1/device-authorizations", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "Disabled owner",
+          scopes: ["me:read"],
+          ttlDays: 30,
+        }),
+      })
+    ).json();
+    const owner = await repository.getCurrentUser("user_dev_admin");
+    if (owner === undefined) throw new Error("Missing seeded user.");
+    await repository.updateUser({
+      ...owner,
+      disabledAt: new Date().toISOString(),
+    });
+
+    const refreshResponse = await secureApi.request(
+      "/api/v1/device-authorizations/refresh",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ refreshToken: created.data.refreshToken }),
+      },
+    );
+    const apiKeys = await repository.listApiKeys("org_default");
+
+    expect(refreshResponse.status).toBe(401);
+    // No replacement access key was minted for the disabled owner.
+    expect(apiKeys).toHaveLength(1);
+  });
 });

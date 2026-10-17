@@ -124,6 +124,12 @@ export class DeviceAuthorizationService {
         throw new AuthenticationError(
           "Device authorization owner was not found.",
         );
+      // A disabled user must not be able to keep minting fresh API keys from
+      // a refresh token issued before the account was disabled.
+      if (user.disabledAt !== undefined)
+        throw new AuthenticationError(
+          "Device authorization owner is disabled.",
+        );
 
       const previousApiKey = await repository.getApiKey(
         authorization.accessApiKeyId,
