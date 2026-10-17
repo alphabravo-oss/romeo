@@ -89,6 +89,7 @@ export type TenantIdentityRepositoryFragment = Pick<
   | "getCurrentUser"
   | "getGroup"
   | "getSsoOidcSettings"
+  | "listEnabledSsoOidcSettingsByIssuer"
   | "listGroupMemberships"
   | "listGroups"
   | "listUsers"

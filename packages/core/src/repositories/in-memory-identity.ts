@@ -191,6 +191,21 @@ export abstract class InMemoryIdentityRepository extends InMemoryRepositoryBase 
     );
   }
 
+  async listEnabledSsoOidcSettingsByIssuer(
+    issuerUrl: string,
+  ): Promise<E.SsoOidcSettings[]> {
+    const issuer = issuerUrl.replace(/\/+$/u, "");
+    if (issuer.length === 0) return [];
+    return this.data.ssoOidcSettings
+      .filter(
+        (settings) =>
+          settings.enabled &&
+          (settings.issuerUrl === issuer ||
+            settings.issuerUrl === `${issuer}/`),
+      )
+      .sort((left, right) => left.orgId.localeCompare(right.orgId));
+  }
+
   async upsertSsoOidcSettings(
     settings: E.SsoOidcSettings,
   ): Promise<E.SsoOidcSettings> {

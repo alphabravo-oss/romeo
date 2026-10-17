@@ -319,6 +319,27 @@ export class PgIdentityRepository {
     return row === undefined ? undefined : toSsoOidcSettingsRecord(row);
   }
 
+  async listEnabledSsoOidcSettingsByIssuer(
+    issuerUrl: string,
+  ): Promise<SsoOidcSettingsRecord[]> {
+    const issuer = issuerUrl.replace(/\/+$/u, "");
+    if (issuer.length === 0) return [];
+    const rows = await this.db
+      .select()
+      .from(orgSsoOidcSettings)
+      .where(
+        and(
+          eq(orgSsoOidcSettings.enabled, true),
+          or(
+            eq(orgSsoOidcSettings.issuerUrl, issuer),
+            eq(orgSsoOidcSettings.issuerUrl, `${issuer}/`),
+          ),
+        ),
+      )
+      .orderBy(asc(orgSsoOidcSettings.orgId));
+    return rows.map(toSsoOidcSettingsRecord);
+  }
+
   async upsertSsoOidcSettings(
     settings: SsoOidcSettingsRecord,
   ): Promise<SsoOidcSettingsRecord> {

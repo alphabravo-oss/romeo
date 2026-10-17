@@ -15,6 +15,7 @@ export const ROMEO_REPOSITORY_METHOD_NAMES = [
   "createGroupMembership",
   "deleteGroupMembership",
   "getSsoOidcSettings",
+  "listEnabledSsoOidcSettingsByIssuer",
   "upsertSsoOidcSettings",
   "getSystemSetting",
   "listSystemSettings",

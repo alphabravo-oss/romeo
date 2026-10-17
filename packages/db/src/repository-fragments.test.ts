@@ -110,6 +110,7 @@ describe("repository fragment composition", () => {
       "getSsoOidcSettings",
       "getWorkspace",
       "listAllOrganizations",
+      "listEnabledSsoOidcSettingsByIssuer",
       "listGroupMemberships",
       "listGroups",
       "listOrganizations",

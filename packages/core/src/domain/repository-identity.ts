@@ -68,6 +68,10 @@ export interface RepositoryIdentityCapability {
     userId: string,
   ): Promise<GroupMembership | undefined>;
   getSsoOidcSettings(orgId: string): Promise<SsoOidcSettings | undefined>;
+  /** Enabled OIDC settings for one issuer (with or without trailing slash). */
+  listEnabledSsoOidcSettingsByIssuer(
+    issuerUrl: string,
+  ): Promise<SsoOidcSettings[]>;
   upsertSsoOidcSettings(settings: SsoOidcSettings): Promise<SsoOidcSettings>;
   getSystemSetting(
     key: string,

@@ -82,6 +82,8 @@ export function createTenantIdentityRepositoryFragment(
     getGroup: identity.getGroup.bind(identity),
     getOrganization: tenancy.getOrganization.bind(tenancy),
     getSsoOidcSettings: identity.getSsoOidcSettings.bind(identity),
+    listEnabledSsoOidcSettingsByIssuer:
+      identity.listEnabledSsoOidcSettingsByIssuer.bind(identity),
     getWorkspace: tenancy.getWorkspace.bind(tenancy),
     listAllOrganizations: tenancy.listAllOrganizations.bind(tenancy),
     listGroupMemberships: identity.listGroupMemberships.bind(identity),

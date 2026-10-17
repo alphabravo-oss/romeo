@@ -1731,6 +1731,27 @@ describe("RomeoRepository conformance", () => {
             enabled: false,
             issuerUrl: "https://issuer.example.com",
           });
+          expect(
+            await repository.listEnabledSsoOidcSettingsByIssuer(
+              "https://issuer.example.com/",
+            ),
+          ).toEqual([]);
+          await repository.upsertSsoOidcSettings({
+            ...settings,
+            updatedAt: "2026-06-30T10:06:00.000Z",
+          });
+          expect(
+            (
+              await repository.listEnabledSsoOidcSettingsByIssuer(
+                "https://issuer.example.com/",
+              )
+            ).map((item) => item.orgId),
+          ).toEqual(["org_default"]);
+          expect(
+            await repository.listEnabledSsoOidcSettingsByIssuer(
+              "https://other-issuer.example.com",
+            ),
+          ).toEqual([]);
         });
       });
 
