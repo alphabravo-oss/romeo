@@ -5,6 +5,7 @@ export const auditActionsByCategory = {
     "auth.oauth2.login.success",
     "auth.saml.login.failure",
     "auth.saml.login.success",
+    "auth.sso.member.revoke",
     "directory_sync.apply",
     "directory_sync.preview",
     "local_auth.login",

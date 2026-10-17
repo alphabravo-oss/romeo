@@ -1,9 +1,82 @@
+import type * as Auth from "@romeo/auth";
+
 import type * as E from "../domain/entities";
 import type * as R from "../domain/repository";
 import { append, removeById, replaceById } from "./collection-helpers";
+import {
+  membershipSourceFor,
+  resourceGrantSourceKey,
+  setMembershipSource,
+} from "./in-memory-membership-sources";
 import { InMemoryOperationsRepository } from "./in-memory-operations";
+import { listSeedResourceGrants } from "./resource-grants";
 
 export abstract class InMemoryOrganizationRepository extends InMemoryOperationsRepository {
+  async listResourceGrants(orgId: string): Promise<Auth.ResourceGrant[]> {
+    return listSeedResourceGrants(this.data, orgId);
+  }
+
+  async listResourceGrantsBySource(
+    orgId: string,
+    principalId: string,
+    source: string,
+  ): Promise<Auth.ResourceGrant[]> {
+    return listSeedResourceGrants(this.data, orgId).filter(
+      (grant) =>
+        grant.principalId === principalId &&
+        membershipSourceFor(this.data, resourceGrantSourceKey(grant.id)) ===
+          source,
+    );
+  }
+
+  async createResourceGrant(
+    grant: Auth.ResourceGrant,
+    options: E.MembershipSourceOptions = {},
+  ): Promise<Auth.ResourceGrant> {
+    setMembershipSource(
+      this.data,
+      resourceGrantSourceKey(grant.id),
+      options.source,
+    );
+    return append(this.data.grants, grant);
+  }
+
+  async deleteResourceGrant(
+    grantId: string,
+  ): Promise<Auth.ResourceGrant | undefined> {
+    setMembershipSource(this.data, resourceGrantSourceKey(grantId), undefined);
+    return removeById(this.data.grants, grantId);
+  }
+
+  async deleteResourceGrantsForPrincipal(
+    orgId: string,
+    principalType: Auth.PrincipalType,
+    principalId: string,
+  ): Promise<Auth.ResourceGrant[]> {
+    const orgGrantIds = new Set(
+      listSeedResourceGrants(this.data, orgId)
+        .filter(
+          (grant) =>
+            grant.principalType === principalType &&
+            grant.principalId === principalId,
+        )
+        .map((grant) => grant.id),
+    );
+    const deleted: Auth.ResourceGrant[] = [];
+    for (let index = this.data.grants.length - 1; index >= 0; index -= 1) {
+      const grant = this.data.grants[index];
+      if (grant !== undefined && orgGrantIds.has(grant.id)) {
+        setMembershipSource(
+          this.data,
+          resourceGrantSourceKey(grant.id),
+          undefined,
+        );
+        deleted.push(...this.data.grants.splice(index, 1));
+      }
+    }
+    return deleted.reverse();
+  }
+
   async listPromptTemplates(
     orgId: string,
     workspaceId?: string,

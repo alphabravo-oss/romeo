@@ -63,13 +63,36 @@ export class PgAccessRepository {
     return rows.map(toResourceGrantRecord);
   }
 
+  async listResourceGrantsBySource(
+    orgId: string,
+    principalId: string,
+    source: string,
+  ): Promise<ResourceGrantRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(resourceGrants)
+      .where(
+        and(
+          eq(resourceGrants.orgId, orgId),
+          eq(resourceGrants.principalId, principalId),
+          eq(resourceGrants.source, source),
+        ),
+      )
+      .orderBy(asc(resourceGrants.resourceType), asc(resourceGrants.id));
+    return rows.map(toResourceGrantRecord);
+  }
+
   async createResourceGrant(
     grant: ResourceGrantRecord,
+    options: { source?: string } = {},
   ): Promise<ResourceGrantRecord> {
     const orgId = await this.orgIdForGrant(grant);
     const [row] = await this.db
       .insert(resourceGrants)
-      .values(toResourceGrantInsert(grant, orgId))
+      .values({
+        ...toResourceGrantInsert(grant, orgId),
+        source: options.source ?? null,
+      })
       .onConflictDoNothing({
         target: [
           resourceGrants.orgId,

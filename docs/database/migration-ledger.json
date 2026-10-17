@@ -603,6 +603,25 @@
         "tenant-purge": "dist/ci/drop-data-connectors-tenant-purge.json",
         "schema-contract": "dist/ci/drop-data-connectors-schema-contract.json"
       }
+    },
+    {
+      "file": "0047_sso_membership_source.sql",
+      "sha256": "96557ef1d6ed17ccb7eb69ed1aab044e3ad0061d749fa4a6c16e03e1e0630556",
+      "phase": "expand",
+      "changesExistingData": false,
+      "restartSafe": true,
+      "previousVersionCompatible": true,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "repairStrategy": "Retain the nullable source columns and partial indexes. Previous applications ignore them and keep writing NULL sources, which SSO reconciliation treats as non-SSO memberships and never revokes. Existing rows stay NULL, so memberships granted by SSO before this migration are not auto-revoked until an administrator removes them or SCIM deprovisions the user. If the indexes misbehave, drop only the affected index and roll forward with a corrected additive index; no membership rows are mutated.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/sso-membership-source-upgrade.json",
+        "restart": "dist/ci/sso-membership-source-restart.json",
+        "rollback-or-forward-repair": "dist/ci/sso-membership-source-repair.json",
+        "backup-restore": "dist/ci/sso-membership-source-backup-restore.json",
+        "tenant-purge": "dist/ci/sso-membership-source-tenant-purge.json",
+        "schema-contract": "dist/ci/sso-membership-source-schema-contract.json"
+      }
     }
   ],
   "requiredEvidence": [

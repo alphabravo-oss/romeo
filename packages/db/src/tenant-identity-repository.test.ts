@@ -61,6 +61,7 @@ describe("tenant identity repository mappers", () => {
         orgId: "org_1",
         groupId: "group_1",
         userId: "user_1",
+        source: "sso:saml:saml",
         createdAt: new Date("2026-06-27T00:00:00.000Z"),
       }),
     ).toEqual({

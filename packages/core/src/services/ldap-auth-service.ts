@@ -15,10 +15,8 @@ import {
   type LdapDirectoryClient,
   type LdapDirectoryEntry,
 } from "./ldap-directory-client";
-import {
-  provisionExternalUser,
-  syncExternalGroupMemberships,
-} from "./external-user-provisioning";
+import { provisionExternalUser } from "./external-user-provisioning";
+import { syncExternalGroupMemberships } from "./sso-membership-reconciliation";
 import type { SecretResolver } from "./secret-resolver";
 import type { CreatedUserSession, SessionService } from "./session-service";
 import { writeAuditLog } from "./audit-log";
@@ -133,6 +131,7 @@ export class LdapAuthService {
         await syncExternalGroupMemberships(repository, {
           groupIds: identity.externalGroupIds,
           orgId,
+          source: { kind: "ldap", providerKey: config.providerId },
           userId,
         });
         const subject = await createUserAuthSubject(repository, user, {

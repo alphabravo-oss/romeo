@@ -46,6 +46,16 @@ export interface GroupMembership {
   createdAt: string;
 }
 
+/**
+ * Provenance recorded alongside a group membership or resource grant. `source`
+ * names the identity-provider mapping that created the row (for example
+ * `sso:oidc:<issuer>`); omitted for manual, SCIM, and directory-sync rows.
+ * Provenance is internal and never returned on read models.
+ */
+export interface MembershipSourceOptions {
+  source?: string;
+}
+
 export interface ApiKey {
   id: string;
   orgId: string;

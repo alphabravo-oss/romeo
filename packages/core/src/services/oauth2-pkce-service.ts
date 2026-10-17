@@ -12,10 +12,8 @@ import type {
   AuthProviderSettingsService,
   OAuth2ProviderLoginConfig,
 } from "./auth-provider-settings-service";
-import {
-  provisionExternalUser,
-  syncExternalGroupMemberships,
-} from "./external-user-provisioning";
+import { provisionExternalUser } from "./external-user-provisioning";
+import { syncExternalGroupMemberships } from "./sso-membership-reconciliation";
 import { fetchGitHubOAuth2Identity } from "./github-oauth2-auth-provider";
 import {
   authorizationEndpoint,
@@ -175,6 +173,7 @@ export class OAuth2PkceService {
       await syncExternalGroupMemberships(repository, {
         groupIds: identity.externalGroupIds,
         orgId: stored.orgId,
+        source: { kind: "oauth2", providerKey: stored.providerId },
         userId,
       });
       const subject = await createUserAuthSubject(repository, user, {

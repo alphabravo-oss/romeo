@@ -81,6 +81,15 @@ import type {
 } from "../domain/entities";
 import type { IdempotencyReceipt } from "../domain/idempotency";
 
+/**
+ * In-memory mirror of the nullable `source` column on `group_memberships` and
+ * `resource_grants`, kept beside the rows so read models never expose it.
+ */
+export interface InMemoryMembershipSource {
+  key: string;
+  source: string;
+}
+
 export interface SeedData extends ContentPolicySeedData {
   organizations: Organization[];
   workspaces: Workspace[];
@@ -159,6 +168,7 @@ export interface SeedData extends ContentPolicySeedData {
   toolConnectors: ToolConnector[];
   toolOperations: ToolOperation[];
   grants: ResourceGrant[];
+  membershipSources?: InMemoryMembershipSource[];
   promptTemplates: PromptTemplate[];
   resourceFavorites: ResourceFavorite[];
   workspaceFolders: WorkspaceFolder[];

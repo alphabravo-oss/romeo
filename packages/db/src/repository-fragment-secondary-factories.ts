@@ -363,6 +363,8 @@ export function createAccessRepositoryFragment(
     deleteResourceGrantsForPrincipal:
       repository.deleteResourceGrantsForPrincipal.bind(repository),
     listResourceGrants: repository.listResourceGrants.bind(repository),
+    listResourceGrantsBySource:
+      repository.listResourceGrantsBySource.bind(repository),
   };
 }
 

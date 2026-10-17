@@ -111,6 +111,7 @@ describe("repository fragment composition", () => {
       "getWorkspace",
       "listAllOrganizations",
       "listGroupMemberships",
+      "listGroupMembershipsBySource",
       "listGroups",
       "listOrganizations",
       "listUsers",
@@ -480,6 +481,7 @@ describe("repository fragment composition", () => {
       "deleteResourceGrant",
       "deleteResourceGrantsForPrincipal",
       "listResourceGrants",
+      "listResourceGrantsBySource",
     ]);
   });
 

@@ -1,6 +1,11 @@
 import type * as E from "../domain/entities";
 import type * as R from "../domain/repository";
 import { append, replaceById } from "./collection-helpers";
+import {
+  groupMembershipSourceKey,
+  membershipSourceFor,
+  setMembershipSource,
+} from "./in-memory-membership-sources";
 import { purgeTenantData } from "./in-memory-tenant-purge";
 import { InMemoryRepositoryBase } from "./in-memory-base";
 
@@ -160,15 +165,36 @@ export abstract class InMemoryIdentityRepository extends InMemoryRepositoryBase 
       );
   }
 
+  async listGroupMembershipsBySource(
+    orgId: string,
+    userId: string,
+    source: string,
+  ): Promise<E.GroupMembership[]> {
+    return (await this.listGroupMemberships(orgId, undefined, userId)).filter(
+      (membership) =>
+        membershipSourceFor(
+          this.data,
+          groupMembershipSourceKey(membership.groupId, membership.userId),
+        ) === source,
+    );
+  }
+
   async createGroupMembership(
     membership: E.GroupMembership,
+    options: E.MembershipSourceOptions = {},
   ): Promise<E.GroupMembership> {
     const existing = this.data.groupMemberships.find(
       (item) =>
         item.groupId === membership.groupId &&
         item.userId === membership.userId,
     );
-    return existing ?? append(this.data.groupMemberships, membership);
+    if (existing !== undefined) return existing;
+    setMembershipSource(
+      this.data,
+      groupMembershipSourceKey(membership.groupId, membership.userId),
+      options.source,
+    );
+    return append(this.data.groupMemberships, membership);
   }
 
   async deleteGroupMembership(
@@ -180,6 +206,11 @@ export abstract class InMemoryIdentityRepository extends InMemoryRepositoryBase 
         membership.groupId === groupId && membership.userId === userId,
     );
     if (index < 0) return undefined;
+    setMembershipSource(
+      this.data,
+      groupMembershipSourceKey(groupId, userId),
+      undefined,
+    );
     return this.data.groupMemberships.splice(index, 1)[0];
   }
 

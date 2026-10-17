@@ -85,6 +85,8 @@ export function createTenantIdentityRepositoryFragment(
     getWorkspace: tenancy.getWorkspace.bind(tenancy),
     listAllOrganizations: tenancy.listAllOrganizations.bind(tenancy),
     listGroupMemberships: identity.listGroupMemberships.bind(identity),
+    listGroupMembershipsBySource:
+      identity.listGroupMembershipsBySource.bind(identity),
     listGroups: identity.listGroups.bind(identity),
     listOrganizations: tenancy.listOrganizations.bind(tenancy),
     listUsers: identity.listUsers.bind(identity),
