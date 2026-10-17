@@ -60,6 +60,7 @@ describe("database migrations", () => {
       "0043_content_deletion_outbox.sql",
       "0044_background_job_claim_indexes.sql",
       "0045_drop_data_connectors.sql",
+      "0046_mfa_attempt_hardening.sql",
     ]);
 
     const sql = readFileSync(join(migrationsDir, sqlFiles[0] ?? ""), "utf8");
@@ -359,6 +360,21 @@ describe("database migrations", () => {
     expect(sql).toContain("ENABLE ROW LEVEL SECURITY");
     expect(sql).toContain("FORCE ROW LEVEL SECURITY");
     expect(sql).toContain("deletion_pending");
+  });
+
+  it("adds additive MFA attempt and TOTP replay columns", () => {
+    const sql = readFileSync(
+      join(migrationsDir, "0046_mfa_attempt_hardening.sql"),
+      "utf8",
+    );
+    expect(sql).toContain(
+      'ADD COLUMN IF NOT EXISTS "attempt_count" integer DEFAULT 0 NOT NULL',
+    );
+    expect(sql).toContain(
+      'ADD COLUMN IF NOT EXISTS "mfa_failed_attempt_count" integer DEFAULT 0 NOT NULL',
+    );
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS "last_totp_step" bigint');
+    expect(sql).not.toMatch(/\b(?:DELETE|DROP|TRUNCATE|UPDATE)\b/u);
   });
 
   it("adds compound indexes for bounded background-job query and claim paths", () => {

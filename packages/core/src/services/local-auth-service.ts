@@ -24,6 +24,11 @@ import {
 } from "./local-auth-errors";
 import { LocalMfaChallengeCodec } from "./local-mfa-challenge";
 import { LocalMfaService } from "./local-mfa-service";
+import {
+  maxLocalMfaChallengeAttempts,
+  recordFailedLocalPasswordAttempt,
+  resetFailedLocalMfaAttempts,
+} from "./local-auth-attempts";
 import type {
   LocalAuthStatus,
   LocalLoginResult,
@@ -39,8 +44,6 @@ export type {
 } from "./local-auth-types";
 
 const defaultOrgId = "org_default";
-const maxFailedAttempts = 10;
-const lockoutMs = 15 * 60 * 1000;
 
 export class LocalAuthService {
   constructor(
@@ -106,7 +109,10 @@ export class LocalAuthService {
       credential.passwordHash,
     );
     if (!passwordValid) {
-      const result = await this.recordFailedPasswordAttempt(credential);
+      const result = await recordFailedLocalPasswordAttempt(
+        this.repository,
+        credential,
+      );
       await this.audit.loginFailure(user, "invalid_password", {
         locked: result.locked,
       });
@@ -151,6 +157,7 @@ export class LocalAuthService {
         };
       }
       await this.mfa.satisfyMfaForLogin({
+        credential: resetCredential,
         user,
         ...(input.totpCode === undefined ? {} : { totpCode: input.totpCode }),
         ...(input.recoveryCode === undefined
@@ -188,12 +195,35 @@ export class LocalAuthService {
       await this.audit.loginFailure(user, "user_disabled");
       throw invalidLocalLogin();
     }
+    const credential = await this.repository.getLocalPasswordCredentialByUserId(
+      user.id,
+    );
+    if (credential === undefined || credential.orgId !== user.orgId)
+      throw invalidLocalLogin();
+    if (isCredentialLocked(credential)) {
+      await this.audit.loginFailure(user, "credential_locked");
+      throw invalidLocalLogin();
+    }
     const mfaPosture = await this.mfa.activeMfaPosture(user.orgId, user.id);
     if (mfaPosture.methods.length === 0) {
       await this.audit.loginFailure(user, "mfa_factor_unavailable");
       throw invalidLocalLogin();
     }
+    // Reserve an attempt before checking the code so a challenge serves at
+    // most a fixed number of guesses, even under concurrent requests.
+    const attempt = await this.repository.claimLocalMfaChallengeAttempt({
+      id: challenge.challengeId,
+      orgId: challenge.orgId,
+      userId: challenge.userId,
+      attemptedAt: new Date().toISOString(),
+      maxAttempts: maxLocalMfaChallengeAttempts,
+    });
+    if (attempt === undefined) {
+      await this.audit.loginFailure(user, "mfa_challenge_unavailable");
+      throw invalidLocalLogin();
+    }
     await this.mfa.satisfyMfaForLogin({
+      credential,
       user,
       ...(input.code === undefined ? {} : { totpCode: input.code }),
       ...(input.recoveryCode === undefined
@@ -407,6 +437,7 @@ export class LocalAuthService {
         updatedAt: now,
       };
       delete credential.lockedUntil;
+      await resetFailedLocalMfaAttempts(repository, existing);
       return repository.updateLocalPasswordCredential(credential);
     }
     return repository.createLocalPasswordCredential({
@@ -442,19 +473,6 @@ export class LocalAuthService {
       passwordUpdatedAt: now,
       updatedAt: now,
     });
-  }
-
-  private async recordFailedPasswordAttempt(
-    credential: LocalPasswordCredential,
-  ): Promise<{ locked: boolean }> {
-    const now = new Date();
-    const update = await this.repository.recordFailedLocalPasswordAttempt({
-      credentialId: credential.id,
-      attemptedAt: now.toISOString(),
-      lockedUntil: new Date(now.getTime() + lockoutMs).toISOString(),
-      maxFailedAttempts,
-    });
-    return { locked: update?.lockedUntil !== undefined };
   }
 
   private async revokeUserSessions(

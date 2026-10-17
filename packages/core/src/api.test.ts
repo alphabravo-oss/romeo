@@ -4059,13 +4059,18 @@ describe("Romeo API thin slice", () => {
       },
     );
     const enrollment = await enrollmentResponse.json();
-    const totpCode = await generate({
-      strategy: "totp",
-      secret: enrollment.data.secret,
-      algorithm: "sha1",
-      digits: 6,
-      period: 30,
-    });
+    // Each TOTP use must present a newer time-step (replay protection), so the
+    // enrollment uses the previous step and later uses the current/next ones.
+    const totpAt = (offsetSeconds: number) =>
+      generate({
+        strategy: "totp",
+        secret: enrollment.data.secret,
+        algorithm: "sha1",
+        digits: 6,
+        period: 30,
+        epoch: Math.floor(Date.now() / 1000) + offsetSeconds,
+      });
+    const enrollmentTotpCode = await totpAt(-30);
     const confirmResponse = await secureApi.request(
       "/api/v1/auth/local/mfa/totp/confirm",
       {
@@ -4075,7 +4080,7 @@ describe("Romeo API thin slice", () => {
         }),
         body: JSON.stringify({
           factorId: enrollment.data.factor.id,
-          code: totpCode,
+          code: enrollmentTotpCode,
         }),
       },
     );
@@ -4091,6 +4096,7 @@ describe("Romeo API thin slice", () => {
       },
     );
     const mfaLogin = await mfaLoginResponse.json();
+    const totpCode = await totpAt(0);
     const badTotpCode = totpCode === "000000" ? "000001" : "000000";
     const failedMfaVerifyResponse = await secureApi.request(
       "/api/v1/auth/local/mfa/verify",
@@ -4141,7 +4147,7 @@ describe("Romeo API thin slice", () => {
         headers: browserMutationHeaders(mfaCookie, {
           "content-type": "application/json",
         }),
-        body: JSON.stringify({ totpCode }),
+        body: JSON.stringify({ totpCode: await totpAt(30) }),
       },
     );
     const recoveryCodes = await recoveryCodesResponse.json();

@@ -43,6 +43,7 @@ export class LocalAuthAudit {
       | "credential_locked"
       | "invalid_mfa_code"
       | "invalid_password"
+      | "mfa_challenge_unavailable"
       | "mfa_factor_unavailable"
       | "user_disabled",
     metadata: Record<string, unknown> = {},

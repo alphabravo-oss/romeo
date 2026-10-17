@@ -130,6 +130,8 @@ describe("repository fragment composition", () => {
     const fragment = createAuthCredentialRepositoryFragment({} as never);
 
     expect(Object.keys(fragment).sort()).toEqual([
+      "acceptLocalMfaTotpStep",
+      "claimLocalMfaChallengeAttempt",
       "consumeLocalMfaChallenge",
       "consumeLocalMfaFactor",
       "consumeSamlAuthRequest",
@@ -157,7 +159,9 @@ describe("repository fragment composition", () => {
       "listLocalMfaFactorsForOrg",
       "listServiceAccounts",
       "listUserSessions",
+      "recordFailedLocalMfaAttempt",
       "recordFailedLocalPasswordAttempt",
+      "resetFailedLocalMfaAttempts",
       "rotateDeviceAuthorization",
       "updateApiKey",
       "updateDeviceAuthorization",

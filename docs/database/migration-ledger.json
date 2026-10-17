@@ -603,6 +603,25 @@
         "tenant-purge": "dist/ci/drop-data-connectors-tenant-purge.json",
         "schema-contract": "dist/ci/drop-data-connectors-schema-contract.json"
       }
+    },
+    {
+      "file": "0046_mfa_attempt_hardening.sql",
+      "sha256": "7aa731fd63af08559fef6ad6b19ff35744bbf3e1d60662091e6349f271c0a0fa",
+      "phase": "expand",
+      "changesExistingData": false,
+      "restartSafe": true,
+      "previousVersionCompatible": true,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "repairStrategy": "The three nullable or defaulted columns are additive and idempotent (ADD COLUMN IF NOT EXISTS). Previous applications ignore them; rolling back the application leaves MFA attempt counters and the last accepted TOTP step unused. If validation fails, keep the columns and roll forward with a corrected application; never drop them while a hardened application version is running.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/mfa-attempt-hardening-upgrade.json",
+        "restart": "dist/ci/mfa-attempt-hardening-restart.json",
+        "rollback-or-forward-repair": "dist/ci/mfa-attempt-hardening-repair.json",
+        "backup-restore": "dist/ci/mfa-attempt-hardening-backup-restore.json",
+        "tenant-purge": "dist/ci/mfa-attempt-hardening-tenant-purge.json",
+        "schema-contract": "dist/ci/mfa-attempt-hardening-schema-contract.json"
+      }
     }
   ],
   "requiredEvidence": [

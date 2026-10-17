@@ -137,6 +137,23 @@ export interface RepositoryIdentityCapability {
     lockedUntil: string;
     maxFailedAttempts: number;
   }): Promise<LocalPasswordCredential | undefined>;
+  /** Counts a failed MFA verification and locks the credential at the limit. */
+  recordFailedLocalMfaAttempt(input: {
+    credentialId: string;
+    attemptedAt: string;
+    lockedUntil: string;
+    maxFailedAttempts: number;
+  }): Promise<LocalPasswordCredential | undefined>;
+  resetFailedLocalMfaAttempts(input: {
+    credentialId: string;
+    updatedAt: string;
+  }): Promise<void>;
+  /** Records a TOTP step only when it is newer than the last accepted step. */
+  acceptLocalMfaTotpStep(input: {
+    factorId: string;
+    timeStep: number;
+    usedAt: string;
+  }): Promise<LocalMfaFactor | undefined>;
   listLocalMfaFactors(orgId: string, userId: string): Promise<LocalMfaFactor[]>;
   listLocalMfaFactorsForOrg(orgId: string): Promise<LocalMfaFactor[]>;
   getLocalMfaFactor(factorId: string): Promise<LocalMfaFactor | undefined>;
@@ -154,6 +171,14 @@ export interface RepositoryIdentityCapability {
     orgId: string;
     userId: string;
     consumedAt: string;
+  }): Promise<LocalMfaChallenge | undefined>;
+  /** Reserves one verification attempt on a live, unexhausted challenge. */
+  claimLocalMfaChallengeAttempt(input: {
+    id: string;
+    orgId: string;
+    userId: string;
+    attemptedAt: string;
+    maxAttempts: number;
   }): Promise<LocalMfaChallenge | undefined>;
   createSamlAuthRequest(request: SamlAuthRequest): Promise<SamlAuthRequest>;
   consumeSamlAuthRequest(input: {
