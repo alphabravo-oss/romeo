@@ -1,7 +1,4 @@
 import { createHash } from "node:crypto";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { deflateRawSync } from "node:zlib";
 
 import { describe, expect, it, vi } from "vitest";
@@ -15385,7 +15382,8 @@ describe("Romeo API thin slice", () => {
     const jobs = await jobsResponse.json();
     const serializedJobs = JSON.stringify(jobs);
     const continuationMessages = providerBodies[1]?.messages as
-      Array<{ content?: string; role: string }> | undefined;
+      | Array<{ content?: string; role: string }>
+      | undefined;
     const toolPayload = JSON.parse(
       continuationMessages?.find((message) => message.role === "tool")
         ?.content ?? "{}",
@@ -15427,7 +15425,8 @@ describe("Romeo API thin slice", () => {
         providerBodies.push(JSON.parse(String(init?.body)));
         if (providerBodies.length === 1) {
           const tools = providerBodies[0]?.tools as
-            Array<{ function?: { name?: string } }> | undefined;
+            | Array<{ function?: { name?: string } }>
+            | undefined;
           const operationToolName = tools?.find((tool) =>
             tool.function?.name?.startsWith("tool_operation_"),
           )?.function?.name;
@@ -15571,7 +15570,8 @@ describe("Romeo API thin slice", () => {
     const audit = await (await api.request("/api/v1/audit-logs")).json();
     const toolCalls = await (await api.request("/api/v1/tool-calls")).json();
     const continuationMessages = providerBodies[1]?.messages as
-      Array<{ content?: string; role: string }> | undefined;
+      | Array<{ content?: string; role: string }>
+      | undefined;
     const dispatchPayload = JSON.parse(
       continuationMessages?.find((message) => message.role === "tool")
         ?.content ?? "{}",
@@ -15669,7 +15669,8 @@ describe("Romeo API thin slice", () => {
       providerFetch: async (_input, init) => {
         providerBodies.push(JSON.parse(String(init?.body)));
         const tools = providerBodies[0]?.tools as
-          Array<{ function?: { name?: string } }> | undefined;
+          | Array<{ function?: { name?: string } }>
+          | undefined;
         const operationToolName = tools?.find((tool) =>
           tool.function?.name?.startsWith("tool_operation_"),
         )?.function?.name;
@@ -15817,7 +15818,8 @@ describe("Romeo API thin slice", () => {
       providerFetch: async (_input, init) => {
         providerBodies.push(JSON.parse(String(init?.body)));
         const tools = providerBodies[0]?.tools as
-          Array<{ function?: { name?: string } }> | undefined;
+          | Array<{ function?: { name?: string } }>
+          | undefined;
         const operationToolName = tools?.find((tool) =>
           tool.function?.name?.startsWith("tool_operation_"),
         )?.function?.name;
@@ -15906,7 +15908,8 @@ describe("Romeo API thin slice", () => {
       (job: { id: string }) => job.id === jobId,
     );
     const objectKey = queuedDispatchJob.payload.payloadStore?.objectKey as
-      string | undefined;
+      | string
+      | undefined;
     if (objectKey === undefined)
       throw new Error("Expected queued managed dispatch payload object");
     expect(await objectStore.getObject(objectKey)).toBeDefined();
@@ -15960,7 +15963,8 @@ describe("Romeo API thin slice", () => {
         providerBodies.push(JSON.parse(String(init?.body)));
         if (providerBodies.length === 1) {
           const tools = providerBodies[0]?.tools as
-            Array<{ function?: { name?: string } }> | undefined;
+            | Array<{ function?: { name?: string } }>
+            | undefined;
           const operationToolName = tools?.find((tool) =>
             tool.function?.name?.startsWith("tool_operation_"),
           )?.function?.name;
