@@ -2,6 +2,7 @@ import { ApiError } from "../errors";
 import {
   assertConnectorHostAllowed,
   isRedirectResponse,
+  lookupNetworkHost,
   type WebsiteConnectorEgressPolicy,
   type WebsiteConnectorHostLookup,
 } from "./outbound-network-policy";
@@ -30,9 +31,17 @@ export async function hardenedWebhookFetch(
   options: HardenedWebhookFetchOptions = {},
 ): Promise<Response> {
   const fetchImpl = options.fetchImpl ?? fetch;
+  // The production transport always resolves and pins: a caller that forgets
+  // hostLookup must not silently fall back to a hostname-only string check,
+  // which `10-0-0-5.nip.io`-style names pass while resolving internally.
+  const usesProductionTransport =
+    options.fetchImpl === undefined || options.fetchImpl === fetch;
+  const hostLookup =
+    options.hostLookup ??
+    (usesProductionTransport ? lookupNetworkHost : undefined);
   const pinnedFetchImpl =
     options.pinnedFetchImpl ??
-    (options.fetchImpl === undefined && options.hostLookup !== undefined
+    (usesProductionTransport && hostLookup !== undefined
       ? dnsPinnedFetch
       : undefined);
   const controller = new AbortController();
@@ -52,9 +61,7 @@ export async function hardenedWebhookFetch(
         ...(options.egressPolicy === undefined
           ? {}
           : { egressPolicy: options.egressPolicy }),
-        ...(options.hostLookup === undefined
-          ? {}
-          : { hostLookup: options.hostLookup }),
+        ...(hostLookup === undefined ? {} : { hostLookup }),
       });
       const requestInit: RequestInit = {
         ...init,

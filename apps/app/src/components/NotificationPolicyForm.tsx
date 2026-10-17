@@ -225,7 +225,7 @@ function PolicyEditor(props: { report: NotificationPolicyReport }) {
                 value={field.state.value}
               />
               <div className="text-xs text-muted">
-                {t("emptyHostRestriction")}
+                {t("emptyTeamsRestriction")}
               </div>
             </div>
           )}

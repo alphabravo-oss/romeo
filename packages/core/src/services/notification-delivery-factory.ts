@@ -1,5 +1,7 @@
 import type { RomeoEnv } from "@romeo/config";
 
+import { ApiError } from "../errors";
+
 import {
   disabledNotificationDeliverySender,
   ResendEmailNotificationDeliverySender,
@@ -20,6 +22,10 @@ import {
   type FcmMessagingClientFactory,
 } from "./notification-delivery-mobile";
 import type { HardenedWebhookFetchOptions } from "./hardened-webhook-fetch";
+import {
+  assertConnectorHostAllowed,
+  type WebsiteConnectorHostLookup,
+} from "./outbound-network-policy";
 import type { SecretResolver } from "./secret-resolver";
 
 export interface NotificationDeliveryFactoryOptions extends HardenedWebhookFetchOptions {
@@ -76,6 +82,40 @@ export function notificationWebhookNetworkOptionsFromEnv(
         ? []
         : env.NOTIFICATION_WEBHOOK_ALLOWED_HOSTS.split(","),
     egressPolicy: env.NOTIFICATION_WEBHOOK_EGRESS_POLICY,
+  };
+}
+
+/** Validates a URL-bearing channel destination before it is stored. */
+export type NotificationDestinationGuard = (url: string) => Promise<void>;
+
+/**
+ * Applies the delivery-time outbound policy when a channel is created, so a
+ * destination that resolves to a private, loopback, link-local, or
+ * non-allowlisted address is refused up front. Delivery still re-resolves and
+ * pins on every attempt; this check only improves feedback.
+ */
+export function createNotificationDestinationGuard(
+  env: RomeoEnv,
+  options: { hostLookup?: WebsiteConnectorHostLookup } = {},
+): NotificationDestinationGuard {
+  const network = notificationWebhookNetworkOptionsFromEnv(env);
+  return async (url) => {
+    try {
+      await assertConnectorHostAllowed(new URL(url), {
+        ...network,
+        ...(options.hostLookup === undefined
+          ? {}
+          : { hostLookup: options.hostLookup }),
+      });
+    } catch (error) {
+      if (!(error instanceof ApiError)) throw error;
+      throw new ApiError(
+        "invalid_notification_channel",
+        "Notification channel destination is not allowed by the outbound network policy.",
+        400,
+        { reason: error.code },
+      );
+    }
   };
 }
 
