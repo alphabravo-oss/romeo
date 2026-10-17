@@ -1,4 +1,5 @@
 import type { RomeoApi } from "../context";
+import { fileContentHeaders } from "../file-content-headers";
 import {
   cancelFileUploadSessionRoute,
   cancelResumableUploadSessionRoute,
@@ -152,13 +153,7 @@ export function registerFileRoutes(app: RomeoApi): void {
       .get("services")
       .files.readContent(subject, context.req.valid("param").fileId);
     return new Response(toArrayBuffer(file.bytes), {
-      headers: {
-        "cache-control": "private, max-age=300",
-        "content-disposition": `inline; filename="${file.fileName.replace(/"/gu, "")}"`,
-        "content-length": String(file.sizeBytes),
-        "content-type": file.mimeType,
-        "x-content-type-options": "nosniff",
-      },
+      headers: fileContentHeaders(file),
     });
   });
 
