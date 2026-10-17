@@ -50,12 +50,6 @@ const publicPaths = new Set([
   "/api/v1/readyz",
   "/api/v1/openapi.json",
   "/api/v1/docs",
-  "/api/v1/openwebui/config",
-  "/api/v1/openwebui/version",
-  "/api/v1/openwebui/version/updates",
-  "/api/config",
-  "/api/version",
-  "/api/version/updates",
   "/api/v1/billing/webhooks/generic",
   "/api/v1/billing/webhooks/stripe",
 ]);

@@ -3,17 +3,23 @@ import { createHash } from "node:crypto";
 import type {
   Chat,
   CollaborationChannel,
-  CollaborationChannelMember,
   Message,
   MessagePart,
 } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError } from "../errors";
 import { createId } from "../ids";
-import { asRecord, trimmedString } from "./openwebui-compatibility-values";
+import { asRecord, trimmedString } from "./channel-values";
 
-export interface OpenWebUiChannelMessageMetadata {
-  schema: "romeo.openwebui-channel-message.v1";
+// Persisted identifiers: channel messages live in a hidden backing chat whose
+// message parts carry this metadata schema. The values predate the removal of
+// the OpenWebUI compatibility layer and are kept so stored channels still load.
+export const CHANNEL_MESSAGE_METADATA_SCHEMA =
+  "romeo.openwebui-channel-message.v1";
+const CHANNEL_BACKING_CHAT_ID_PREFIX = "chat_openwebui_";
+
+export interface ChannelMessageMetadata {
+  schema: typeof CHANNEL_MESSAGE_METADATA_SCHEMA;
   channelId: string;
   userId: string;
   updatedAt?: string | undefined;
@@ -28,17 +34,17 @@ export interface OpenWebUiChannelMessageMetadata {
   pinnedAt?: string | undefined;
   deletedAt?: string | undefined;
   deletedBy?: string | undefined;
-  reactions?: OpenWebUiChannelMessageReaction[] | undefined;
+  reactions?: StoredChannelReaction[] | undefined;
 }
 
-export interface OpenWebUiChannelMessageReaction {
+export interface StoredChannelReaction {
   userId: string;
   name: string;
 }
 
-export interface OpenWebUiChannelMessageRecord {
+export interface ChannelMessageRecord {
   message: Message;
-  metadata: OpenWebUiChannelMessageMetadata;
+  metadata: ChannelMessageMetadata;
 }
 
 export function normalizeChannelType(value: unknown): string | undefined {
@@ -46,62 +52,19 @@ export function normalizeChannelType(value: unknown): string | undefined {
   if (type === undefined) return undefined;
   if (type === "group" || type === "dm") return type;
   throw new ApiError(
-    "invalid_openwebui_channel",
+    "invalid_channel",
     "Channel type must be group, dm, or empty.",
     400,
   );
 }
 
-export function normalizeChannelName(
-  name: string,
-  type: string | undefined,
-): string {
-  const normalized = name.trim().replace(/\s+/gu, "-").toLowerCase();
-  if (type === "dm") return normalized.slice(0, 128);
-  if (normalized.length === 0) {
-    throw new ApiError(
-      "invalid_openwebui_channel",
-      "Channel name must not be empty.",
-      400,
-    );
-  }
-  return normalized.slice(0, 128);
-}
-
-export function channelMemberDraft(input: {
-  channelId: string;
-  orgId: string;
-  userId: string;
-  invitedBy: string;
-  now: string;
-  role?: string | undefined;
-}): CollaborationChannelMember {
-  return {
-    id: createId("openwebui_channel_member"),
-    orgId: input.orgId,
-    channelId: input.channelId,
-    userId: input.userId,
-    ...(input.role === undefined ? {} : { role: input.role }),
-    status: "joined",
-    isActive: true,
-    isChannelMuted: false,
-    isChannelPinned: false,
-    invitedAt: input.now,
-    invitedBy: input.invitedBy,
-    joinedAt: input.now,
-    lastReadAt: input.now,
-    createdAt: input.now,
-    updatedAt: input.now,
-  };
-}
-
 export function channelBackingChatId(channelId: string): string {
   const digest = createHash("sha256").update(channelId).digest("hex");
-  return `chat_openwebui_${digest.slice(0, 24)}`;
+  return `${CHANNEL_BACKING_CHAT_ID_PREFIX}${digest.slice(0, 24)}`;
 }
 
 export function channelEventBusKey(orgId: string, channelId: string): string {
-  return `${orgId}:openwebui-channel:${channelId}`;
+  return `${orgId}:channel:${channelId}`;
 }
 
 export async function ensureChannelBackingChat(
@@ -126,7 +89,7 @@ export function normalizeChannelMessageContent(content: string): string {
   const normalized = content.trim();
   if (normalized.length === 0) {
     throw new ApiError(
-      "invalid_openwebui_channel_message",
+      "invalid_channel_message",
       "Channel message content must not be empty.",
       400,
     );
@@ -162,12 +125,12 @@ export function compareIsoDesc(left: string, right: string): number {
 export function channelMessageMetadataFromParts(
   parts: MessagePart[],
   channelId: string,
-): OpenWebUiChannelMessageMetadata | undefined {
-  let latest: OpenWebUiChannelMessageMetadata | undefined;
+): ChannelMessageMetadata | undefined {
+  let latest: ChannelMessageMetadata | undefined;
   for (const part of parts) {
     if (part.type !== "collaboration_channel_metadata") continue;
     const metadata = asRecord(part.metadata);
-    if (metadata?.schema !== "romeo.openwebui-channel-message.v1") continue;
+    if (metadata?.schema !== CHANNEL_MESSAGE_METADATA_SCHEMA) continue;
     if (metadata.channelId !== channelId) continue;
     const userId = trimmedString(metadata.userId);
     if (userId === undefined) continue;
@@ -175,8 +138,8 @@ export function channelMessageMetadataFromParts(
       metadata.data === null ? null : (asRecord(metadata.data) ?? undefined);
     const meta =
       metadata.meta === null ? null : (asRecord(metadata.meta) ?? undefined);
-    const candidate: OpenWebUiChannelMessageMetadata = {
-      schema: "romeo.openwebui-channel-message.v1",
+    const candidate: ChannelMessageMetadata = {
+      schema: CHANNEL_MESSAGE_METADATA_SCHEMA,
       channelId,
       userId,
       ...(trimmedString(metadata.updatedAt) === undefined
@@ -227,7 +190,7 @@ export function normalizeReactionName(name: string): string {
   const normalized = name.trim();
   if (normalized.length === 0 || normalized.length > 120) {
     throw new ApiError(
-      "invalid_openwebui_channel_reaction",
+      "invalid_channel_reaction",
       "Channel message reaction must be between 1 and 120 characters.",
       400,
     );
@@ -238,7 +201,7 @@ export function normalizeReactionName(name: string): string {
 export async function appendChannelMessageMetadata(
   repository: RomeoRepository,
   messageId: string,
-  metadata: OpenWebUiChannelMessageMetadata,
+  metadata: ChannelMessageMetadata,
 ): Promise<void> {
   await repository.createMessageParts([
     {
@@ -252,21 +215,19 @@ export async function appendChannelMessageMetadata(
 }
 
 export function replaceChannelMessageRecord(
-  records: OpenWebUiChannelMessageRecord[],
+  records: ChannelMessageRecord[],
   messageId: string,
-  metadata: OpenWebUiChannelMessageMetadata,
-): OpenWebUiChannelMessageRecord[] {
+  metadata: ChannelMessageMetadata,
+): ChannelMessageRecord[] {
   return records.map((record) =>
     record.message.id === messageId ? { ...record, metadata } : record,
   );
 }
 
-function reactionsFromMetadata(
-  value: unknown,
-): OpenWebUiChannelMessageReaction[] {
+function reactionsFromMetadata(value: unknown): StoredChannelReaction[] {
   if (!Array.isArray(value)) return [];
   const seen = new Set<string>();
-  const reactions: OpenWebUiChannelMessageReaction[] = [];
+  const reactions: StoredChannelReaction[] = [];
   for (const item of value) {
     const record = asRecord(item);
     const userId = trimmedString(record?.userId);

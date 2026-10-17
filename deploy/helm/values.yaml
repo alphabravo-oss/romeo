@@ -187,7 +187,6 @@ env:
   ROMEO_ENV: production
   APP_ORIGIN: https://romeo.example.com
   REPOSITORY_DRIVER: postgres
-  OPENWEBUI_COMPATIBILITY_ENABLED: "false"
   TENANCY_MODE: single
   GA_CHECKLIST_PATH: ""
   GA_TARGET_PREFLIGHT_PATH: ""

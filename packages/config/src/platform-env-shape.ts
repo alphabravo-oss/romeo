@@ -26,10 +26,6 @@ export const platformEnvShape = {
   DATABASE_URL: z
     .string()
     .default("postgres://romeo:romeo@localhost:5432/romeo"),
-  OPENWEBUI_COMPATIBILITY_ENABLED: z
-    .enum(["true", "false"])
-    .default("false")
-    .transform((value) => value === "true"),
   CAPABILITY_PLATFORM_DISABLED_IDS: platformDisabledCapabilityIdsSchema,
   TENANCY_MODE: z.enum(["single", "multi"]).default("single"),
   GA_CHECKLIST_PATH: z.string().default(""),

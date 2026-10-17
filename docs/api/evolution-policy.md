@@ -86,7 +86,7 @@ does not allow a silent deletion.
 - `pnpm check:api-evolution-policy` validates the exported OpenAPI document and ledger.
 - `pnpm contract:breaking` compares the document with the committed baseline.
 - `pnpm check:sdk-typescript-drift` and `pnpm check:sdk-drift` prove both generated clients.
-- Default and OpenWebUI-enabled route-coverage gates prove deployed paths match contracts.
+- The route-coverage gate proves deployed paths match contracts.
 
 The policy checker also has an embedded fixture self-test so weakening a validation rule
 cannot turn the production document's current lack of deprecated operations into a

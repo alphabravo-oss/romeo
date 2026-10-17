@@ -1,35 +1,34 @@
 import type { AuthSubject } from "@romeo/auth";
-import type {
-  OpenWebUiChannelListItemResponse,
-  OpenWebUiChannelMemberResponse,
-  OpenWebUiChannelMessageResponse,
-  OpenWebUiChannelResponse,
-  OpenWebUiChannelUserResponse,
-} from "@romeo/contracts";
 
 import type {
   CollaborationChannel,
   CollaborationChannelMember,
   User,
 } from "../domain/entities";
+import type {
+  ChannelStoreListItem,
+  ChannelStoreMessage,
+  ChannelStoreChannel,
+  ChannelStoreUser,
+} from "./channel-store-types";
 import {
   compareIsoDesc,
   normalizeChannelType,
-  type OpenWebUiChannelMessageReaction,
-  type OpenWebUiChannelMessageRecord,
-} from "./openwebui-channel-metadata";
-import { toEpochSeconds } from "./openwebui-compatibility-values";
+  type StoredChannelReaction,
+  type ChannelMessageRecord,
+} from "./channel-metadata";
+import { toEpochSeconds } from "./channel-values";
 
 export function toChannelListItem(
   channel: CollaborationChannel,
   subject: AuthSubject,
   members: CollaborationChannelMember[],
   userById: Map<string, User>,
-  messageRecords: OpenWebUiChannelMessageRecord[] = [],
-): OpenWebUiChannelListItemResponse {
+  messageRecords: ChannelMessageRecord[] = [],
+): ChannelStoreListItem {
   const type = normalizeChannelType(channel.type) ?? null;
   const callerMember = members.find((member) => member.userId === subject.id);
-  const item: OpenWebUiChannelListItemResponse = {
+  const item: ChannelStoreListItem = {
     ...toChannelBase(channel),
     last_message_at: channelLastMessageAt(messageRecords),
     unread_count: channelUnreadCount(messageRecords, callerMember, subject.id),
@@ -53,8 +52,8 @@ export function toChannelResponse(
   members: CollaborationChannelMember[],
   userById: Map<string, User>,
   writeAccess: boolean,
-  messageRecords: OpenWebUiChannelMessageRecord[] = [],
-): OpenWebUiChannelResponse {
+  messageRecords: ChannelMessageRecord[] = [],
+): ChannelStoreChannel {
   const listItem = toChannelListItem(
     channel,
     subject,
@@ -86,9 +85,7 @@ export function toChannelResponse(
   };
 }
 
-export function toChannelUserResponse(
-  user: User,
-): OpenWebUiChannelUserResponse {
+export function toChannelUserResponse(user: User): ChannelStoreUser {
   return {
     id: user.id,
     email: user.email,
@@ -102,40 +99,12 @@ export function toChannelUserResponse(
   };
 }
 
-export function toChannelMemberResponse(
-  member: CollaborationChannelMember,
-): OpenWebUiChannelMemberResponse {
-  return {
-    id: member.id,
-    channel_id: member.channelId,
-    user_id: member.userId,
-    role: member.role ?? null,
-    status: member.status ?? null,
-    is_active: member.isActive,
-    is_channel_muted: member.isChannelMuted,
-    is_channel_pinned: member.isChannelPinned,
-    data: member.data ?? null,
-    meta: member.meta ?? null,
-    invited_at:
-      member.invitedAt === undefined ? null : toEpochSeconds(member.invitedAt),
-    invited_by: member.invitedBy ?? null,
-    joined_at: toEpochSeconds(member.joinedAt),
-    left_at: member.leftAt === undefined ? null : toEpochSeconds(member.leftAt),
-    last_read_at:
-      member.lastReadAt === undefined
-        ? null
-        : toEpochSeconds(member.lastReadAt),
-    created_at: toEpochSeconds(member.createdAt),
-    updated_at: toEpochSeconds(member.updatedAt),
-  };
-}
-
 export function toChannelMessageResponse(
-  record: OpenWebUiChannelMessageRecord,
+  record: ChannelMessageRecord,
   userById: Map<string, User>,
-  records: OpenWebUiChannelMessageRecord[],
+  records: ChannelMessageRecord[],
   options: { includeReply?: boolean } = {},
-): OpenWebUiChannelMessageResponse {
+): ChannelStoreMessage {
   const replies = records.filter(
     (candidate) => candidate.metadata.parentId === record.message.id,
   );
@@ -187,7 +156,7 @@ export function toChannelMessageResponse(
 function toChannelBase(
   channel: CollaborationChannel,
 ): Omit<
-  OpenWebUiChannelListItemResponse,
+  ChannelStoreListItem,
   "last_message_at" | "unread_count" | "user_ids" | "users"
 > {
   return {
@@ -217,7 +186,7 @@ function toChannelBase(
 }
 
 function channelMessageReactionResponses(
-  reactions: OpenWebUiChannelMessageReaction[],
+  reactions: StoredChannelReaction[],
 ): Array<{ name: string; user_id: string }> {
   return reactions.map((reaction) => ({
     user_id: reaction.userId,
@@ -232,9 +201,7 @@ function channelMessageDataValue(
   return data;
 }
 
-function channelLastMessageAt(
-  records: OpenWebUiChannelMessageRecord[],
-): number | null {
+function channelLastMessageAt(records: ChannelMessageRecord[]): number | null {
   const latest = records
     .filter((record) => record.metadata.parentId === undefined)
     .sort((left, right) =>
@@ -244,7 +211,7 @@ function channelLastMessageAt(
 }
 
 function channelUnreadCount(
-  records: OpenWebUiChannelMessageRecord[],
+  records: ChannelMessageRecord[],
   callerMember: CollaborationChannelMember | undefined,
   userId: string,
 ): number {

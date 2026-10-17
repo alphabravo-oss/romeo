@@ -24,7 +24,6 @@ try {
     "exec",
     "tsx",
     "../../scripts/export-openapi.ts",
-    "--include-openwebui",
     "--output",
     "../../dist/generated/openapi.json",
   ]);

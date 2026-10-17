@@ -9,15 +9,7 @@ const outputPath = resolve(process.cwd(), output);
 mkdirSync(dirname(outputPath), { recursive: true });
 writeFileSync(
   outputPath,
-  `${JSON.stringify(
-    openApiDocument({
-      openWebUiCompatibilityEnabled:
-        process.env.OPENWEBUI_COMPATIBILITY_ENABLED === "true" ||
-        process.argv.includes("--include-openwebui"),
-    }),
-    null,
-    2,
-  )}\n`,
+  `${JSON.stringify(openApiDocument(), null, 2)}\n`,
   "utf8",
 );
 console.log(`Wrote Romeo OpenAPI document to ${outputPath}`);

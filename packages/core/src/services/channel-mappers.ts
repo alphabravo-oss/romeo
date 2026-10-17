@@ -1,18 +1,16 @@
 import { createHash } from "node:crypto";
 
-import type {
-  OpenWebUiChannelEvent,
-  OpenWebUiChannelListItemResponse,
-  OpenWebUiChannelMemberResponse,
-  OpenWebUiChannelMessageInput,
-  OpenWebUiChannelMessageResponse,
-  OpenWebUiChannelResponse,
-  OpenWebUiChannelUserResponse,
-} from "@romeo/contracts";
-
 import type { CollaborationChannelMember, User } from "../domain/entities";
 import { ApiError } from "../errors";
 import { createId } from "../ids";
+import type {
+  ChannelStoreEvent,
+  ChannelStoreListItem,
+  ChannelStoreMessageInput,
+  ChannelStoreMessage,
+  ChannelStoreChannel,
+  ChannelStoreUser,
+} from "./channel-store-types";
 import type {
   Channel,
   ChannelEvent,
@@ -72,9 +70,9 @@ export function nativeChannelType(
   return "standard";
 }
 
-export function toBridgeMessageInput(
+export function toStoreMessageInput(
   input: CreateChannelMessageInput,
-): OpenWebUiChannelMessageInput {
+): ChannelStoreMessageInput {
   return {
     content: input.content,
     ...(input.clientMessageId === undefined
@@ -90,7 +88,7 @@ export function toBridgeMessageInput(
 }
 
 export function toChannel(
-  source: OpenWebUiChannelListItemResponse | OpenWebUiChannelResponse,
+  source: ChannelStoreListItem | ChannelStoreChannel,
 ): Channel {
   const channel: Channel = {
     id: source.id,
@@ -126,9 +124,7 @@ export function toChannel(
   return channel;
 }
 
-function toChannelUser(
-  source: OpenWebUiChannelUserResponse | User,
-): ChannelUser {
+function toChannelUser(source: ChannelStoreUser | User): ChannelUser {
   if ("is_active" in source) {
     return {
       id: source.id,
@@ -146,32 +142,9 @@ function toChannelUser(
 }
 
 export function toChannelMember(
-  source: CollaborationChannelMember | OpenWebUiChannelMemberResponse,
+  source: CollaborationChannelMember,
   user?: User,
 ): ChannelMember {
-  if ("channel_id" in source) {
-    const member: ChannelMember = {
-      id: source.id,
-      channelId: source.channel_id,
-      userId: source.user_id,
-      active: source.is_active,
-      muted: source.is_channel_muted,
-      pinned: source.is_channel_pinned,
-      createdAt: requiredIsoFromEpoch(source.created_at),
-      updatedAt: requiredIsoFromEpoch(source.updated_at),
-    };
-    assignOptionalMemberFields(member, {
-      invitedAt: isoFromEpoch(source.invited_at),
-      invitedBy: source.invited_by ?? undefined,
-      joinedAt: isoFromEpoch(source.joined_at),
-      lastReadAt: isoFromEpoch(source.last_read_at),
-      leftAt: isoFromEpoch(source.left_at),
-      role: source.role ?? undefined,
-      status: source.status ?? undefined,
-      user,
-    });
-    return member;
-  }
   const member: ChannelMember = {
     id: source.id,
     channelId: source.channelId,
@@ -218,9 +191,7 @@ function assignOptionalMemberFields(
   if (input.user !== undefined) member.user = toChannelUser(input.user);
 }
 
-export function toChannelMessage(
-  source: OpenWebUiChannelMessageResponse,
-): ChannelMessage {
+export function toChannelMessage(source: ChannelStoreMessage): ChannelMessage {
   const message: ChannelMessage = {
     id: source.id,
     channelId: source.channel_id,
@@ -271,7 +242,7 @@ function toChannelReactions(reactions: unknown[]): ChannelMessageReaction[] {
     );
 }
 
-export function toChannelEvent(source: OpenWebUiChannelEvent): ChannelEvent {
+export function toChannelEvent(source: ChannelStoreEvent): ChannelEvent {
   const event: ChannelEvent = {
     id: source.id,
     channelId: source.channel_id,
@@ -294,7 +265,7 @@ function toChannelEventData(data: unknown): unknown {
     "content" in data &&
     "created_at" in data
   ) {
-    return toChannelMessage(data as OpenWebUiChannelMessageResponse);
+    return toChannelMessage(data as ChannelStoreMessage);
   }
   if (
     typeof data === "object" &&
@@ -316,10 +287,6 @@ function toChannelEventData(data: unknown): unknown {
 
 function requiredIsoFromEpoch(epochSeconds: number): string {
   return new Date(epochSeconds * 1000).toISOString();
-}
-
-function isoFromEpoch(epochSeconds: number | null): string | undefined {
-  return epochSeconds === null ? undefined : requiredIsoFromEpoch(epochSeconds);
 }
 
 export function hashAuditValue(value: string): string {

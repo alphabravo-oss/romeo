@@ -890,10 +890,6 @@
           "type": "string",
           "enum": ["single", "multi"]
         },
-        "OPENWEBUI_COMPATIBILITY_ENABLED": {
-          "type": "string",
-          "enum": ["true", "false"]
-        },
         "GA_CHECKLIST_PATH": {
           "type": "string"
         },

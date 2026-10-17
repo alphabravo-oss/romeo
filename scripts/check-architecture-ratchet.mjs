@@ -280,42 +280,6 @@ const forbiddenPatterns = [
     pattern: /["'`]\/api\/v1\/(?:openai\/models|chat\/completions|embeddings)/u,
   },
   {
-    id: "handwritten_openwebui_system_client_endpoint",
-    files: [
-      resolve(root, "packages/api-client/src/resources/compatibility.ts"),
-    ],
-    pattern: /["'`]\/api\/v1\/(?:auths\/|openwebui\/(?:config|version))/u,
-  },
-  {
-    id: "handwritten_openwebui_chat_folder_client_endpoint",
-    files: [
-      resolve(root, "packages/api-client/src/resources/compatibility.ts"),
-      resolve(root, "packages/api-client/src/resources/openwebui-chats.ts"),
-      resolve(root, "packages/api-client/src/contracts/compatibility.ts"),
-    ],
-    pattern: /["'`]\/api\/v1\/(?:chats|folders)(?:\/|["'`])/u,
-  },
-  {
-    id: "duplicate_openwebui_chat_folder_core_contract",
-    files: [resolve(root, "packages/core/src/http/openapi/components.ts")],
-    pattern:
-      /(?:OpenWebUi(?:Chat|Folder|Tag)|["'`]\/(?:chats|folders)(?:\/|["'`]))/u,
-  },
-  {
-    id: "handwritten_openwebui_channel_client_endpoint",
-    files: [
-      resolve(root, "packages/api-client/src/resources/compatibility.ts"),
-      resolve(root, "packages/api-client/src/resources/openwebui-channels.ts"),
-      resolve(root, "packages/api-client/src/contracts/compatibility.ts"),
-    ],
-    pattern: /["'`]\/api\/v1\/channels(?:\/|["'`])/u,
-  },
-  {
-    id: "duplicate_openwebui_channel_core_contract",
-    files: [resolve(root, "packages/core/src/http/openapi/components.ts")],
-    pattern: /OpenWebUiChannel/u,
-  },
-  {
     id: "handwritten_openapi_document_route",
     files: [resolve(root, "packages/core/src/api.ts")],
     pattern: /app\.get\s*\(\s*["'`]\/api\/v1\/(?:docs|openapi\.json)/u,
@@ -839,38 +803,6 @@ const requiredPatterns = [
     id: "openai_compatibility_generated_sdk_exports_operation",
     files: [resolve(root, "packages/api-client/src/generated/sdk/sdk.gen.ts")],
     pattern: /openAiCompatibilityCreateChatCompletion/u,
-  },
-  {
-    id: "openwebui_system_routes_use_authoritative_contracts",
-    files: [resolve(root, "packages/core/src/http/routes/openwebui.ts")],
-    pattern: /getOpenWebUiConfigRoute/u,
-  },
-  {
-    id: "openwebui_system_generated_sdk_exports_operation",
-    files: [resolve(root, "packages/api-client/src/generated/sdk/sdk.gen.ts")],
-    pattern: /openWebUiGetConfig/u,
-  },
-  {
-    id: "openwebui_chat_folder_routes_use_authoritative_contracts",
-    files: [resolve(root, "packages/core/src/http/routes/openwebui-chats.ts")],
-    pattern: /listOpenWebUiChatsRoute/u,
-  },
-  {
-    id: "openwebui_chat_folder_generated_sdk_exports_operation",
-    files: [resolve(root, "packages/api-client/src/generated/sdk/sdk.gen.ts")],
-    pattern: /openWebUiListChats/u,
-  },
-  {
-    id: "openwebui_channel_routes_use_authoritative_contracts",
-    files: [
-      resolve(root, "packages/core/src/http/routes/openwebui-channels.ts"),
-    ],
-    pattern: /listOpenWebUiChannelsRoute/u,
-  },
-  {
-    id: "openwebui_channel_generated_sdk_exports_operation",
-    files: [resolve(root, "packages/api-client/src/generated/sdk/sdk.gen.ts")],
-    pattern: /openWebUiListChannels/u,
   },
 ];
 const requiredFailures = requiredPatterns.flatMap(({ id, files, pattern }) =>

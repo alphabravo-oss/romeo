@@ -4,30 +4,22 @@ import {
   hasWorkspaceAccess,
   type AuthSubject,
 } from "@romeo/auth";
-import type {
-  OpenWebUiChannelListItemResponse,
-  OpenWebUiChannelMembersResponse,
-  OpenWebUiChannelResponse,
-} from "@romeo/contracts";
 
-import type { User } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
-import type { OpenWebUiChannelAccess } from "./openwebui-channel-access";
-import {
-  toChannelListItem,
-  toChannelResponse,
-  toChannelUserResponse,
-} from "./openwebui-channel-responses";
+import type {
+  ChannelStoreListItem,
+  ChannelStoreChannel,
+} from "./channel-store-types";
+import type { ChannelAccess } from "./channel-access";
+import { toChannelListItem, toChannelResponse } from "./channel-responses";
 
-export class OpenWebUiChannelQueries {
+export class ChannelQueries {
   constructor(
     private readonly repository: RomeoRepository,
-    private readonly access: OpenWebUiChannelAccess,
+    private readonly access: ChannelAccess,
   ) {}
 
-  async list(
-    subject: AuthSubject,
-  ): Promise<OpenWebUiChannelListItemResponse[]> {
+  async list(subject: AuthSubject): Promise<ChannelStoreListItem[]> {
     assertReadSubject(subject);
     const [channels, memberships, users] = await Promise.all([
       this.repository.listCollaborationChannels(subject.orgId),
@@ -59,7 +51,7 @@ export class OpenWebUiChannelQueries {
   async get(
     subject: AuthSubject,
     channelId: string,
-  ): Promise<OpenWebUiChannelResponse> {
+  ): Promise<ChannelStoreChannel> {
     assertReadSubject(subject);
     const channel = await this.access.authorizedChannel(
       subject,
@@ -83,39 +75,13 @@ export class OpenWebUiChannelQueries {
       messageRecords,
     );
   }
-
-  async members(
-    subject: AuthSubject,
-    channelId: string,
-  ): Promise<OpenWebUiChannelMembersResponse> {
-    assertReadSubject(subject);
-    const channel = await this.access.authorizedChannel(
-      subject,
-      channelId,
-      "read",
-    );
-    const [members, users] = await Promise.all([
-      this.repository.listCollaborationChannelMembers(
-        subject.orgId,
-        channel.id,
-      ),
-      this.repository.listUsers(subject.orgId),
-    ]);
-    const userById = new Map(users.map((user) => [user.id, user]));
-    const responseUsers = members
-      .filter((member) => member.isActive)
-      .map((member) => userById.get(member.userId))
-      .filter((user): user is User => user !== undefined)
-      .map(toChannelUserResponse);
-    return { users: responseUsers, total: responseUsers.length };
-  }
 }
 
 function assertReadSubject(subject: AuthSubject): void {
   assertScope(subject, "chats:read");
   if (subject.type !== "user") {
     throw new AuthorizationError(
-      "OpenWebUI chat compatibility is available only for user subjects.",
+      "Channels are available only for user subjects.",
     );
   }
 }

@@ -4,15 +4,8 @@ import {
   type OpenApiDocumentResponse,
 } from "@romeo/contracts";
 
-export interface OpenApiDocumentOptions {
-  openWebUiCompatibilityEnabled?: boolean;
-}
-
-export function openApiDocument(options: OpenApiDocumentOptions = {}) {
-  const document = contractOpenApiDocument({
-    openWebUiCompatibilityEnabled:
-      options.openWebUiCompatibilityEnabled ?? false,
-  });
+export function openApiDocument() {
+  const document = contractOpenApiDocument();
   return {
     ...document,
     info: {
@@ -30,10 +23,8 @@ export function openApiDocument(options: OpenApiDocumentOptions = {}) {
   };
 }
 
-export function openApiJsonDocument(
-  options: OpenApiDocumentOptions = {},
-): OpenApiDocumentResponse {
-  return openApiDocument(options) as unknown as OpenApiDocumentResponse;
+export function openApiJsonDocument(): OpenApiDocumentResponse {
+  return openApiDocument() as unknown as OpenApiDocumentResponse;
 }
 
 export const defaultOpenApiDocument = openApiDocument();

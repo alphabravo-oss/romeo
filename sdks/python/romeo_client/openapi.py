@@ -853,12 +853,6 @@ OPERATIONS = {
         "path": "/api/chat/completions",
         "summary": "Create a chat completion through the legacy API alias"
     },
-    "get_api_config": {
-        "name": "get_api_config",
-        "method": "GET",
-        "path": "/api/config",
-        "summary": "Get configuration through the legacy OpenWebUI alias"
-    },
     "post_api_embeddings": {
         "name": "post_api_embeddings",
         "method": "POST",
@@ -876,18 +870,6 @@ OPERATIONS = {
         "method": "GET",
         "path": "/api/models/{model}",
         "summary": "Retrieve an OpenAI-compatible model through the legacy API alias"
-    },
-    "get_api_version": {
-        "name": "get_api_version",
-        "method": "GET",
-        "path": "/api/version",
-        "summary": "Get version through the legacy OpenWebUI alias"
-    },
-    "get_api_version_updates": {
-        "name": "get_api_version_updates",
-        "method": "GET",
-        "path": "/api/version/updates",
-        "summary": "Get version updates through the legacy OpenWebUI alias"
     },
     "get_audit_logs": {
         "name": "get_audit_logs",
@@ -1003,12 +985,6 @@ OPERATIONS = {
         "path": "/api/v1/auth/saml/start",
         "summary": "Start browser SAML login"
     },
-    "get_auths": {
-        "name": "get_auths",
-        "method": "GET",
-        "path": "/api/v1/auths/",
-        "summary": "Get the OpenWebUI-compatible session user"
-    },
     "get_billing_entitlements": {
         "name": "get_billing_entitlements",
         "method": "GET",
@@ -1117,150 +1093,6 @@ OPERATIONS = {
         "path": "/api/v1/capability-flags/effective",
         "summary": "List the caller's effective organization capability flags"
     },
-    "get_channels": {
-        "name": "get_channels",
-        "method": "GET",
-        "path": "/api/v1/channels/",
-        "summary": "List OpenWebUI-compatible channels"
-    },
-    "post_channels_create": {
-        "name": "post_channels_create",
-        "method": "POST",
-        "path": "/api/v1/channels/create",
-        "summary": "Create an OpenWebUI-compatible channel"
-    },
-    "get_channels_list": {
-        "name": "get_channels_list",
-        "method": "GET",
-        "path": "/api/v1/channels/list",
-        "summary": "List OpenWebUI-compatible channels alias"
-    },
-    "get_channels_users_userid": {
-        "name": "get_channels_users_userid",
-        "method": "GET",
-        "path": "/api/v1/channels/users/{userId}",
-        "summary": "Get or create an OpenWebUI-compatible DM channel"
-    },
-    "get_channels_channelid": {
-        "name": "get_channels_channelid",
-        "method": "GET",
-        "path": "/api/v1/channels/{channelId}",
-        "summary": "Get an OpenWebUI-compatible channel"
-    },
-    "delete_channels_channelid_delete": {
-        "name": "delete_channels_channelid_delete",
-        "method": "DELETE",
-        "path": "/api/v1/channels/{channelId}/delete",
-        "summary": "Delete an OpenWebUI-compatible channel"
-    },
-    "get_channels_channelid_events": {
-        "name": "get_channels_channelid_events",
-        "method": "GET",
-        "path": "/api/v1/channels/{channelId}/events",
-        "summary": "Stream OpenWebUI-compatible channel events"
-    },
-    "get_channels_channelid_members": {
-        "name": "get_channels_channelid_members",
-        "method": "GET",
-        "path": "/api/v1/channels/{channelId}/members",
-        "summary": "List OpenWebUI-compatible channel members"
-    },
-    "post_channels_channelid_members_active": {
-        "name": "post_channels_channelid_members_active",
-        "method": "POST",
-        "path": "/api/v1/channels/{channelId}/members/active",
-        "summary": "Update current OpenWebUI-compatible channel active state"
-    },
-    "get_channels_channelid_messages": {
-        "name": "get_channels_channelid_messages",
-        "method": "GET",
-        "path": "/api/v1/channels/{channelId}/messages",
-        "summary": "List OpenWebUI-compatible channel messages"
-    },
-    "get_channels_channelid_messages_pinned": {
-        "name": "get_channels_channelid_messages_pinned",
-        "method": "GET",
-        "path": "/api/v1/channels/{channelId}/messages/pinned",
-        "summary": "List pinned OpenWebUI-compatible channel messages"
-    },
-    "post_channels_channelid_messages_post": {
-        "name": "post_channels_channelid_messages_post",
-        "method": "POST",
-        "path": "/api/v1/channels/{channelId}/messages/post",
-        "summary": "Post an OpenWebUI-compatible channel message"
-    },
-    "post_channels_channelid_messages_read": {
-        "name": "post_channels_channelid_messages_read",
-        "method": "POST",
-        "path": "/api/v1/channels/{channelId}/messages/read",
-        "summary": "Mark an OpenWebUI-compatible channel as read"
-    },
-    "get_channels_channelid_messages_messageid": {
-        "name": "get_channels_channelid_messages_messageid",
-        "method": "GET",
-        "path": "/api/v1/channels/{channelId}/messages/{messageId}",
-        "summary": "Get an OpenWebUI-compatible channel message"
-    },
-    "get_channels_channelid_messages_messageid_data": {
-        "name": "get_channels_channelid_messages_messageid_data",
-        "method": "GET",
-        "path": "/api/v1/channels/{channelId}/messages/{messageId}/data",
-        "summary": "Get OpenWebUI-compatible channel message data"
-    },
-    "delete_channels_channelid_messages_messageid_delete": {
-        "name": "delete_channels_channelid_messages_messageid_delete",
-        "method": "DELETE",
-        "path": "/api/v1/channels/{channelId}/messages/{messageId}/delete",
-        "summary": "Delete an OpenWebUI-compatible channel message"
-    },
-    "post_channels_channelid_messages_messageid_pin": {
-        "name": "post_channels_channelid_messages_messageid_pin",
-        "method": "POST",
-        "path": "/api/v1/channels/{channelId}/messages/{messageId}/pin",
-        "summary": "Pin or unpin an OpenWebUI-compatible channel message"
-    },
-    "post_channels_channelid_messages_messageid_reactions_add": {
-        "name": "post_channels_channelid_messages_messageid_reactions_add",
-        "method": "POST",
-        "path": "/api/v1/channels/{channelId}/messages/{messageId}/reactions/add",
-        "summary": "Add an OpenWebUI-compatible channel message reaction"
-    },
-    "post_channels_channelid_messages_messageid_reactions_remove": {
-        "name": "post_channels_channelid_messages_messageid_reactions_remove",
-        "method": "POST",
-        "path": "/api/v1/channels/{channelId}/messages/{messageId}/reactions/remove",
-        "summary": "Remove an OpenWebUI-compatible channel message reaction"
-    },
-    "get_channels_channelid_messages_messageid_thread": {
-        "name": "get_channels_channelid_messages_messageid_thread",
-        "method": "GET",
-        "path": "/api/v1/channels/{channelId}/messages/{messageId}/thread",
-        "summary": "List OpenWebUI-compatible channel thread replies"
-    },
-    "post_channels_channelid_messages_messageid_update": {
-        "name": "post_channels_channelid_messages_messageid_update",
-        "method": "POST",
-        "path": "/api/v1/channels/{channelId}/messages/{messageId}/update",
-        "summary": "Update an OpenWebUI-compatible channel message"
-    },
-    "post_channels_channelid_update": {
-        "name": "post_channels_channelid_update",
-        "method": "POST",
-        "path": "/api/v1/channels/{channelId}/update",
-        "summary": "Update an OpenWebUI-compatible channel"
-    },
-    "post_channels_channelid_update_members_add": {
-        "name": "post_channels_channelid_update_members_add",
-        "method": "POST",
-        "path": "/api/v1/channels/{channelId}/update/members/add",
-        "summary": "Add OpenWebUI-compatible channel members"
-    },
-    "post_channels_channelid_update_members_remove": {
-        "name": "post_channels_channelid_update_members_remove",
-        "method": "POST",
-        "path": "/api/v1/channels/{channelId}/update/members/remove",
-        "summary": "Remove OpenWebUI-compatible channel members"
-    },
     "get_chat_experience": {
         "name": "get_chat_experience",
         "method": "GET",
@@ -1288,8 +1120,8 @@ OPERATIONS = {
     "get_chats": {
         "name": "get_chats",
         "method": "GET",
-        "path": "/api/v1/chats/",
-        "summary": "List OpenWebUI-compatible chat summaries"
+        "path": "/api/v1/chats",
+        "summary": "List chats in a workspace"
     },
     "post_chats": {
         "name": "post_chats",
@@ -1297,77 +1129,17 @@ OPERATIONS = {
         "path": "/api/v1/chats",
         "summary": "Create a chat"
     },
-    "get_chats_all_archived": {
-        "name": "get_chats_all_archived",
-        "method": "GET",
-        "path": "/api/v1/chats/all/archived",
-        "summary": "List all OpenWebUI-compatible archived chats"
-    },
-    "get_chats_all_tags": {
-        "name": "get_chats_all_tags",
-        "method": "GET",
-        "path": "/api/v1/chats/all/tags",
-        "summary": "List OpenWebUI-compatible chat tags"
-    },
-    "get_chats_archived": {
-        "name": "get_chats_archived",
-        "method": "GET",
-        "path": "/api/v1/chats/archived",
-        "summary": "List OpenWebUI-compatible archived chat summaries"
-    },
-    "get_chats_folder_folderid": {
-        "name": "get_chats_folder_folderid",
-        "method": "GET",
-        "path": "/api/v1/chats/folder/{folderId}",
-        "summary": "List OpenWebUI-compatible chats in a folder"
-    },
-    "get_chats_folder_folderid_list": {
-        "name": "get_chats_folder_folderid_list",
-        "method": "GET",
-        "path": "/api/v1/chats/folder/{folderId}/list",
-        "summary": "List OpenWebUI-compatible chat summaries in a folder"
-    },
     "post_chats_import": {
         "name": "post_chats_import",
         "method": "POST",
         "path": "/api/v1/chats/import",
         "summary": "Import a portable conversation"
     },
-    "get_chats_list": {
-        "name": "get_chats_list",
-        "method": "GET",
-        "path": "/api/v1/chats/list",
-        "summary": "List OpenWebUI-compatible chat summaries alias"
-    },
-    "post_chats_new": {
-        "name": "post_chats_new",
-        "method": "POST",
-        "path": "/api/v1/chats/new",
-        "summary": "Create an OpenWebUI-compatible chat"
-    },
-    "get_chats_pinned": {
-        "name": "get_chats_pinned",
-        "method": "GET",
-        "path": "/api/v1/chats/pinned",
-        "summary": "List OpenWebUI-compatible pinned chat summaries"
-    },
     "get_chats_query": {
         "name": "get_chats_query",
         "method": "GET",
         "path": "/api/v1/chats/query",
         "summary": "Search chat titles, messages, and attachment names"
-    },
-    "get_chats_search": {
-        "name": "get_chats_search",
-        "method": "GET",
-        "path": "/api/v1/chats/search",
-        "summary": "Search OpenWebUI-compatible chat summaries"
-    },
-    "post_chats_tags": {
-        "name": "post_chats_tags",
-        "method": "POST",
-        "path": "/api/v1/chats/tags",
-        "summary": "List OpenWebUI-compatible chats by tag"
     },
     "delete_chats_chatid": {
         "name": "delete_chats_chatid",
@@ -1422,12 +1194,6 @@ OPERATIONS = {
         "method": "GET",
         "path": "/api/v1/chats/{chatId}/export",
         "summary": "Export a portable conversation"
-    },
-    "post_chats_chatid_folder": {
-        "name": "post_chats_chatid_folder",
-        "method": "POST",
-        "path": "/api/v1/chats/{chatId}/folder",
-        "summary": "Move an OpenWebUI-compatible chat to a folder"
     },
     "post_chats_chatid_fork": {
         "name": "post_chats_chatid_fork",
@@ -1507,18 +1273,6 @@ OPERATIONS = {
         "path": "/api/v1/chats/{chatId}/messages/{messageId}/feedback",
         "summary": "Record or clear caller feedback for a message"
     },
-    "post_chats_chatid_pin": {
-        "name": "post_chats_chatid_pin",
-        "method": "POST",
-        "path": "/api/v1/chats/{chatId}/pin",
-        "summary": "Toggle OpenWebUI-compatible chat pin state"
-    },
-    "get_chats_chatid_pinned": {
-        "name": "get_chats_chatid_pinned",
-        "method": "GET",
-        "path": "/api/v1/chats/{chatId}/pinned",
-        "summary": "Get OpenWebUI-compatible chat pinned status"
-    },
     "get_chats_chatid_queue": {
         "name": "get_chats_chatid_queue",
         "method": "GET",
@@ -1578,24 +1332,6 @@ OPERATIONS = {
         "method": "DELETE",
         "path": "/api/v1/chats/{chatId}/tag-assignments/{tagSlug}",
         "summary": "Remove a tag from a chat"
-    },
-    "delete_chats_chatid_tags": {
-        "name": "delete_chats_chatid_tags",
-        "method": "DELETE",
-        "path": "/api/v1/chats/{chatId}/tags",
-        "summary": "Remove an OpenWebUI-compatible tag from a chat"
-    },
-    "get_chats_chatid_tags": {
-        "name": "get_chats_chatid_tags",
-        "method": "GET",
-        "path": "/api/v1/chats/{chatId}/tags",
-        "summary": "List OpenWebUI-compatible tags for a chat"
-    },
-    "post_chats_chatid_tags": {
-        "name": "post_chats_chatid_tags",
-        "method": "POST",
-        "path": "/api/v1/chats/{chatId}/tags",
-        "summary": "Assign an OpenWebUI-compatible tag to a chat"
     },
     "post_chats_chatid_unarchive": {
         "name": "post_chats_chatid_unarchive",
@@ -2107,48 +1843,6 @@ OPERATIONS = {
         "path": "/api/v1/files/{fileId}/shares",
         "summary": "Share a file"
     },
-    "get_folders": {
-        "name": "get_folders",
-        "method": "GET",
-        "path": "/api/v1/folders/",
-        "summary": "List OpenWebUI-compatible folders"
-    },
-    "post_folders": {
-        "name": "post_folders",
-        "method": "POST",
-        "path": "/api/v1/folders/",
-        "summary": "Create an OpenWebUI-compatible folder"
-    },
-    "delete_folders_folderid": {
-        "name": "delete_folders_folderid",
-        "method": "DELETE",
-        "path": "/api/v1/folders/{folderId}",
-        "summary": "Delete an OpenWebUI-compatible folder"
-    },
-    "get_folders_folderid": {
-        "name": "get_folders_folderid",
-        "method": "GET",
-        "path": "/api/v1/folders/{folderId}",
-        "summary": "Get an OpenWebUI-compatible folder"
-    },
-    "post_folders_folderid_update": {
-        "name": "post_folders_folderid_update",
-        "method": "POST",
-        "path": "/api/v1/folders/{folderId}/update",
-        "summary": "Update an OpenWebUI-compatible folder"
-    },
-    "post_folders_folderid_update_expanded": {
-        "name": "post_folders_folderid_update_expanded",
-        "method": "POST",
-        "path": "/api/v1/folders/{folderId}/update/expanded",
-        "summary": "Update an OpenWebUI-compatible folder expanded state"
-    },
-    "post_folders_folderid_update_parent": {
-        "name": "post_folders_folderid_update_parent",
-        "method": "POST",
-        "path": "/api/v1/folders/{folderId}/update/parent",
-        "summary": "Update an OpenWebUI-compatible folder parent"
-    },
     "get_governance_compliance_report": {
         "name": "get_governance_compliance_report",
         "method": "GET",
@@ -2652,24 +2346,6 @@ OPERATIONS = {
         "method": "GET",
         "path": "/api/v1/openapi.json",
         "summary": "Get the Romeo OpenAPI document"
-    },
-    "get_openwebui_config": {
-        "name": "get_openwebui_config",
-        "method": "GET",
-        "path": "/api/v1/openwebui/config",
-        "summary": "Get OpenWebUI-compatible configuration"
-    },
-    "get_openwebui_version": {
-        "name": "get_openwebui_version",
-        "method": "GET",
-        "path": "/api/v1/openwebui/version",
-        "summary": "Get the OpenWebUI-compatible version"
-    },
-    "get_openwebui_version_updates": {
-        "name": "get_openwebui_version_updates",
-        "method": "GET",
-        "path": "/api/v1/openwebui/version/updates",
-        "summary": "Get OpenWebUI-compatible version update status"
     },
     "get_organizations": {
         "name": "get_organizations",

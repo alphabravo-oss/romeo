@@ -6,10 +6,10 @@ import {
   type AuditMetadata,
   writeAuditLog,
 } from "./audit-log";
-import type { OpenWebUiCompatibilityService } from "./openwebui-compatibility-service";
+import type { ChannelStore } from "./channel-store";
 import {
   hashAuditValue,
-  toBridgeMessageInput,
+  toStoreMessageInput,
   toChannel,
   toChannelEvent,
   toChannelMessage,
@@ -26,15 +26,15 @@ import type {
 export class ChannelMessageService {
   constructor(
     protected readonly repository: RomeoRepository,
-    protected readonly bridge: OpenWebUiCompatibilityService,
+    protected readonly store: ChannelStore,
   ) {}
 
   async list(subject: AuthSubject): Promise<Channel[]> {
-    return (await this.bridge.channels(subject)).map(toChannel);
+    return (await this.store.channels(subject)).map(toChannel);
   }
 
   async get(subject: AuthSubject, channelId: string): Promise<Channel> {
-    return toChannel(await this.bridge.channel(subject, channelId));
+    return toChannel(await this.store.channel(subject, channelId));
   }
 
   async messages(
@@ -43,7 +43,7 @@ export class ChannelMessageService {
     input: { limit?: number | undefined; offset?: number | undefined } = {},
   ): Promise<ChannelMessage[]> {
     return (
-      await this.bridge.channelMessages(subject, channelId, {
+      await this.store.channelMessages(subject, channelId, {
         limit: input.limit,
         skip: input.offset,
       })
@@ -55,10 +55,10 @@ export class ChannelMessageService {
     channelId: string,
     input: CreateChannelMessageInput,
   ): Promise<ChannelMessage> {
-    const message = await this.bridge.postChannelMessage(
+    const message = await this.store.postChannelMessage(
       subject,
       channelId,
-      toBridgeMessageInput(input),
+      toStoreMessageInput(input),
     );
     await this.audit(subject, "channel.message.create", channelId, {
       messageId: message.id,
@@ -74,7 +74,7 @@ export class ChannelMessageService {
     messageId: string,
   ): Promise<ChannelMessage> {
     return toChannelMessage(
-      await this.bridge.channelMessage(subject, channelId, messageId),
+      await this.store.channelMessage(subject, channelId, messageId),
     );
   }
 
@@ -85,7 +85,7 @@ export class ChannelMessageService {
     input: { limit?: number | undefined; offset?: number | undefined } = {},
   ): Promise<ChannelMessage[]> {
     return (
-      await this.bridge.channelThreadMessages(subject, channelId, messageId, {
+      await this.store.channelThreadMessages(subject, channelId, messageId, {
         limit: input.limit,
         skip: input.offset,
       })
@@ -98,7 +98,7 @@ export class ChannelMessageService {
     input: { page?: number | undefined } = {},
   ): Promise<ChannelMessage[]> {
     return (
-      await this.bridge.pinnedChannelMessages(subject, channelId, input)
+      await this.store.pinnedChannelMessages(subject, channelId, input)
     ).map(toChannelMessage);
   }
 
@@ -108,11 +108,11 @@ export class ChannelMessageService {
     messageId: string,
     input: CreateChannelMessageInput,
   ): Promise<ChannelMessage> {
-    const message = await this.bridge.updateChannelMessage(
+    const message = await this.store.updateChannelMessage(
       subject,
       channelId,
       messageId,
-      toBridgeMessageInput(input),
+      toStoreMessageInput(input),
     );
     await this.audit(subject, "channel.message.update", channelId, {
       messageId,
@@ -125,7 +125,7 @@ export class ChannelMessageService {
     channelId: string,
     messageId: string,
   ): Promise<{ channelId: string; messageId: string; deleted: boolean }> {
-    const deleted = await this.bridge.deleteChannelMessage(
+    const deleted = await this.store.deleteChannelMessage(
       subject,
       channelId,
       messageId,
@@ -143,7 +143,7 @@ export class ChannelMessageService {
     messageId: string,
     input: PinChannelMessageInput,
   ): Promise<ChannelMessage> {
-    const message = await this.bridge.pinChannelMessage(
+    const message = await this.store.pinChannelMessage(
       subject,
       channelId,
       messageId,
@@ -162,7 +162,7 @@ export class ChannelMessageService {
     messageId: string,
     name: string,
   ): Promise<ChannelMessage> {
-    await this.bridge.addChannelMessageReaction(
+    await this.store.addChannelMessageReaction(
       subject,
       channelId,
       messageId,
@@ -181,7 +181,7 @@ export class ChannelMessageService {
     messageId: string,
     name: string,
   ): Promise<ChannelMessage> {
-    await this.bridge.removeChannelMessageReaction(
+    await this.store.removeChannelMessageReaction(
       subject,
       channelId,
       messageId,
@@ -195,9 +195,9 @@ export class ChannelMessageService {
   }
 
   async markRead(subject: AuthSubject, channelId: string): Promise<Channel> {
-    await this.bridge.markChannelRead(subject, channelId);
+    await this.store.markChannelRead(subject, channelId);
     await this.audit(subject, "channel.read", channelId, {});
-    return toChannel(await this.bridge.channel(subject, channelId));
+    return toChannel(await this.store.channel(subject, channelId));
   }
 
   async subscribeEvents(
@@ -205,7 +205,7 @@ export class ChannelMessageService {
     channelId: string,
     handler: (event: ChannelEvent) => void,
   ): Promise<ChannelEventSubscription> {
-    const subscription = await this.bridge.subscribeChannelEvents(
+    const subscription = await this.store.subscribeChannelEvents(
       subject,
       channelId,
       (event) => handler(toChannelEvent(event)),
