@@ -92,7 +92,7 @@ export function RunActivityList({
 }) {
   if (activities.length === 0) return null;
   return (
-    <div className="rm-run-activities" aria-live="polite">
+    <div className="rm-run-activities">
       {activities.slice(-4).map((activity) => (
         <div className={`rm-run-activity ${activity.state}`} key={activity.id}>
           <span className="rm-run-activity-dot" /> {activity.label}
@@ -118,7 +118,7 @@ export function ReasoningPanel({
 }) {
   const { t } = useLocale();
   return (
-    <details aria-live="polite" className="rm-reasoning">
+    <details className="rm-reasoning">
       <summary>
         <Brain aria-hidden="true" size={13} />
         {streaming
@@ -152,7 +152,7 @@ const toolCallDotStates: Record<
 export function ToolCallList({ calls }: { calls: ChatToolCall[] }) {
   if (calls.length === 0) return null;
   return (
-    <div className="rm-tool-calls" aria-live="polite">
+    <div className="rm-tool-calls">
       {calls.map((call) => (
         <ToolCallCard call={call} key={call.id} />
       ))}

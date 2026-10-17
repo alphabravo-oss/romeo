@@ -321,6 +321,7 @@ export const ChatMessages = memo(function ChatMessages({
     <>
       <TranscriptWindow
         accessibleDescription={t("fullTranscriptModeDescription")}
+        busy={isStreaming}
         estimateSize={estimateSize}
         feedLabel={t("conversationTranscript")}
         getScrollElement={getScrollElement}
