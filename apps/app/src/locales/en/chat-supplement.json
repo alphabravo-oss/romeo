@@ -184,5 +184,7 @@
   "reasoningAdjustedSummaryUnavailable": "Reasoning-summary persistence is not available.",
   "reasoningAdjustedDialectUnsupported": "The provider protocol does not support this setting.",
   "reasoningAdjustedModelUnsupported": "The selected model or provider does not support this setting.",
-  "turnRequiresCapabilities": "This turn requires: {{capabilities}}."
+  "turnRequiresCapabilities": "This turn requires: {{capabilities}}.",
+  "markdownRemoteImageLoad": "Load image",
+  "markdownRemoteImageBlocked": "External image not loaded:"
 }
